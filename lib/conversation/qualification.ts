@@ -9,6 +9,7 @@ import {
   qualificationStatus,
   qualificationStatusValues
 } from "./constants";
+import { hasAny, normalizeInput } from "./text";
 
 export type DeviceImpact = (typeof deviceImpactValues)[number];
 
@@ -375,6 +376,18 @@ function inferKnownOutage(
 
   if (
     hasAny(normalized, [
+      "not sure",
+      "unsure",
+      "unknown",
+      "i don't know",
+      "i dont know"
+    ])
+  ) {
+    return { knownOutage: false };
+  }
+
+  if (
+    hasAny(normalized, [
       "no outage",
       "no known outage",
       "not aware",
@@ -410,15 +423,6 @@ function inferBooleanAnswer<Key extends keyof QualificationAnswers>(
   } as Pick<QualificationAnswers, Key>;
 }
 
-function normalizeInput(input: string): string {
-  return input
-    .toLowerCase()
-    .replaceAll("’", "'")
-    .replace(/[^a-z0-9\s']/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function isUncertain(normalizedInput: string): boolean {
   return hasAny(normalizedInput, [
     "i don't know",
@@ -428,17 +432,4 @@ function isUncertain(normalizedInput: string): boolean {
     "unknown",
     "maybe"
   ]);
-}
-
-function hasAny(normalizedInput: string, phrases: string[]): boolean {
-  return phrases.some((phrase) => {
-    const escapedPhrase = escapeRegExp(phrase).replace(/\s+/g, "\\s+");
-    const phrasePattern = new RegExp(`(^|\\s)${escapedPhrase}(?=\\s|$)`);
-
-    return phrasePattern.test(normalizedInput);
-  });
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
