@@ -13,6 +13,9 @@ dist/
 # testing
 coverage/
 
+# typescript
+*.tsbuildinfo
+
 # local env
 .env*
 !.env.example
