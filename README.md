@@ -1,6 +1,6 @@
 # WiFi Support Agent
 
-A small LLM-assisted chat app that helps a user troubleshoot WiFi connectivity issues and, when appropriate, walks them through rebooting a Linksys EA6350 router.
+A small LLM-assisted chat app that helps a user troubleshoot WiFi connectivity issues and, when appropriate, walks them through rebooting a Linksys router.
 
 ## Tech Stack
 
