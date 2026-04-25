@@ -116,6 +116,92 @@ describe("conversation flow transcripts", () => {
     );
   });
 
+  it("keeps qualification in control when the user asks a question", () => {
+    const session: ConversationSession = {
+      ...createInitialConversationSession(),
+      state: "QUALIFYING",
+      currentQuestionId: "deviceImpact"
+    };
+
+    const turn = advanceConversation(session, "What is a reboot?");
+
+    expect(turn.session.state).toBe("QUALIFYING");
+    expect(turn.session.currentQuestionId).toBe("deviceImpact");
+    expect(turn.assistantMessage).toContain(
+      "one device or multiple devices"
+    );
+  });
+
+  it("explains how to check for an ISP outage and stays on the question", () => {
+    const session: ConversationSession = {
+      ...createInitialConversationSession(),
+      state: "QUALIFYING",
+      currentQuestionId: "knownOutage"
+    };
+
+    const turn = advanceConversation(session, "How can I know?");
+
+    expect(turn.session.state).toBe("QUALIFYING");
+    expect(turn.session.currentQuestionId).toBe("knownOutage");
+    expect(turn.assistantMessage).toContain("ISP's outage page");
+    expect(turn.assistantMessage).toContain("not sure");
+    expect(turn.assistantMessage).toContain(
+      "Do you know of an internet service provider outage"
+    );
+  });
+
+  it("accepts not sure as a valid known-outage answer", () => {
+    const session: ConversationSession = {
+      ...createInitialConversationSession(),
+      state: "QUALIFYING",
+      currentQuestionId: "knownOutage"
+    };
+
+    const turn = advanceConversation(session, "not sure");
+
+    expect(turn.session.state).toBe("QUALIFYING");
+    expect(turn.session.qualification.knownOutage).toBe(false);
+    expect(turn.session.currentQuestionId).toBe("deviceImpact");
+  });
+
+  it("keeps reboot intro in control when the user asks a question", () => {
+    const session: ConversationSession = {
+      ...createInitialConversationSession(),
+      state: "REBOOT_INTRO"
+    };
+
+    const turn = advanceConversation(session, "Should I press the Reset button?");
+
+    expect(turn.session.state).toBe("REBOOT_INTRO");
+    expect(turn.assistantMessage).toContain("ready to begin");
+    expect(turn.assistantMessage).toContain("Reset button");
+  });
+
+  it("keeps reboot steps in control when the user asks a question", () => {
+    const session: ConversationSession = {
+      ...createInitialConversationSession(),
+      state: "REBOOT_STEP_4",
+      rebootStepIndex: 3
+    };
+
+    const turn = advanceConversation(session, "How long should this take?");
+
+    expect(turn.session.state).toBe("REBOOT_STEP_4");
+    expect(turn.session.rebootStepIndex).toBe(3);
+    expect(turn.assistantMessage).toContain("wait about two minutes");
+    expect(turn.assistantMessage).toContain("Step 4");
+  });
+
+  it("handles an issue description with a question mark through normal state flow", () => {
+    const turn = advanceConversation(
+      createInitialConversationSession(),
+      "My WiFi is down?"
+    );
+
+    expect(turn.session.state).toBe("QUALIFYING");
+    expect(turn.session.currentQuestionId).toBe("deviceImpact");
+  });
+
   it("retries when the user does not confirm reboot step completion", () => {
     const session: ConversationSession = {
       ...createInitialConversationSession(),
@@ -128,6 +214,19 @@ describe("conversation flow transcripts", () => {
     expect(turn.session.state).toBe("REBOOT_STEP_1");
     expect(turn.assistantMessage).toContain("Take your time");
     expect(turn.assistantMessage).toContain("Step 1");
+  });
+
+  it("advances a wait step when the user waited at least the required time", () => {
+    const session: ConversationSession = {
+      ...createInitialConversationSession(),
+      state: "REBOOT_STEP_2",
+      rebootStepIndex: 1
+    };
+
+    const turn = advanceConversation(session, "I have waited 50");
+
+    expect(turn.session.state).toBe("REBOOT_STEP_3");
+    expect(turn.assistantMessage).toContain("Reconnect the modem power cord");
   });
 
   it("does not restart a terminal conversation", () => {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { chatRole } from "@/lib/conversation/constants";
 import { advanceConversation } from "@/lib/conversation/engine";
+import { generateAssistantResponse } from "@/lib/llm/client";
 import { chatRequestSchema } from "./schema";
 import {
   createInitialConversationSession,
@@ -25,12 +26,17 @@ export async function POST(request: Request) {
 
   const { latestUserMessage, session } = parsedRequest;
   const turn = advanceConversation(session, latestUserMessage.content);
+  const assistantMessage = await generateAssistantResponse({
+    userInput: latestUserMessage.content,
+    draftResponse: turn.assistantMessage,
+    session: turn.session
+  });
 
   const response: ChatResponse = {
     message: {
       id: crypto.randomUUID(),
       role: chatRole.assistant,
-      content: turn.assistantMessage
+      content: assistantMessage
     },
     state: turn.session.state,
     session: turn.session
