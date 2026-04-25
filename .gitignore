@@ -1,0 +1,24 @@
+docs/
+
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+
+# production
+dist/
+
+# testing
+coverage/
+
+# local env
+.env*
+!.env.example
+
+# system files
+.DS_Store
+
+# logs
+*.log
