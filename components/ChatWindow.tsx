@@ -1,12 +1,17 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { initialConversationState, type ConversationState } from "@/lib/conversation/state";
+import { chatRole } from "@/lib/conversation/constants";
+import {
+  createInitialConversationSession,
+  type ChatResponse,
+  type ConversationSession
+} from "@/lib/conversation/state";
 import { MessageBubble, type Message } from "./MessageBubble";
 
 const welcomeMessage: Message = {
   id: "welcome",
-  role: "assistant",
+  role: chatRole.assistant,
   content:
     "Hi. I can help decide whether rebooting your Linksys EA6350 router is the right next step. What WiFi or internet issue are you seeing?"
 };
@@ -22,7 +27,9 @@ function createMessageId() {
 export function ChatWindow() {
   const [messages, setMessages] = useState<Message[]>([welcomeMessage]);
   const [input, setInput] = useState("");
-  const [state, setState] = useState<ConversationState>(initialConversationState);
+  const [session, setSession] = useState<ConversationSession>(
+    createInitialConversationSession
+  );
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,7 +43,7 @@ export function ChatWindow() {
 
     const userMessage: Message = {
       id: createMessageId(),
-      role: "user",
+      role: chatRole.user,
       content: trimmedInput
     };
 
@@ -54,7 +61,7 @@ export function ChatWindow() {
         },
         body: JSON.stringify({
           messages: nextMessages,
-          state
+          session
         })
       });
 
@@ -62,9 +69,14 @@ export function ChatWindow() {
         throw new Error("The assistant could not respond.");
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as ChatResponse;
+
+      if (!data.session) {
+        throw new Error("The assistant response did not include a session.");
+      }
+
       setMessages((currentMessages) => [...currentMessages, data.message]);
-      setState(data.state);
+      setSession(data.session);
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {

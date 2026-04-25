@@ -1,6 +1,8 @@
+import type { ChatRole } from "@/lib/conversation/state";
+
 export type Message = {
   id: string;
-  role: "assistant" | "user";
+  role: ChatRole;
   content: string;
 };
 
