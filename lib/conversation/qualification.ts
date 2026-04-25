@@ -1,8 +1,20 @@
-export type DeviceImpact = "single_device" | "multiple_devices";
+import {
+  connectivityScope,
+  connectivityScopeValues,
+  deviceImpact,
+  deviceImpactValues,
+  equipmentStatus,
+  equipmentStatusValues,
+  qualificationQuestionIds,
+  qualificationStatus,
+  qualificationStatusValues
+} from "./constants";
 
-export type ConnectivityScope = "general_connectivity" | "specific_service";
+export type DeviceImpact = (typeof deviceImpactValues)[number];
 
-export type EquipmentStatus = "powered_and_connected" | "power_or_cable_issue";
+export type ConnectivityScope = (typeof connectivityScopeValues)[number];
+
+export type EquipmentStatus = (typeof equipmentStatusValues)[number];
 
 export type QualificationAnswers = {
   deviceImpact?: DeviceImpact;
@@ -13,14 +25,7 @@ export type QualificationAnswers = {
   acceptsTemporaryInterruption?: boolean;
 };
 
-export const qualificationQuestionIds = [
-  "deviceImpact",
-  "connectivityScope",
-  "equipmentStatus",
-  "knownOutage",
-  "canAccessEquipment",
-  "acceptsTemporaryInterruption"
-] as const;
+export { qualificationQuestionIds };
 
 export type QualificationQuestionId = (typeof qualificationQuestionIds)[number];
 
@@ -31,7 +36,7 @@ export type QualificationQuestion = {
   retryPrompt: string;
 };
 
-export type QualificationStatus = "appropriate" | "not_appropriate" | "unknown";
+export type QualificationStatus = (typeof qualificationStatusValues)[number];
 
 export type QualificationDecision = {
   status: QualificationStatus;
@@ -89,25 +94,25 @@ export const qualificationQuestions: QualificationQuestion[] = [
 export function decideRebootAppropriateness(
   answers: QualificationAnswers
 ): QualificationDecision {
-  if (answers.deviceImpact === "single_device") {
+  if (answers.deviceImpact === deviceImpact.singleDevice) {
     return {
-      status: "not_appropriate",
+      status: qualificationStatus.notAppropriate,
       reason:
         "A router reboot is not the best first step because only one device appears to be affected."
     };
   }
 
-  if (answers.connectivityScope === "specific_service") {
+  if (answers.connectivityScope === connectivityScope.specificService) {
     return {
-      status: "not_appropriate",
+      status: qualificationStatus.notAppropriate,
       reason:
         "A router reboot is not the best first step because the issue appears limited to one app or website."
     };
   }
 
-  if (answers.equipmentStatus === "power_or_cable_issue") {
+  if (answers.equipmentStatus === equipmentStatus.powerOrCableIssue) {
     return {
-      status: "not_appropriate",
+      status: qualificationStatus.notAppropriate,
       reason:
         "A router reboot should wait until the modem and router power and network cables are firmly connected."
     };
@@ -115,7 +120,7 @@ export function decideRebootAppropriateness(
 
   if (answers.knownOutage === true) {
     return {
-      status: "not_appropriate",
+      status: qualificationStatus.notAppropriate,
       reason:
         "A router reboot is unlikely to help while there is a known internet service provider outage."
     };
@@ -123,7 +128,7 @@ export function decideRebootAppropriateness(
 
   if (answers.canAccessEquipment === false) {
     return {
-      status: "not_appropriate",
+      status: qualificationStatus.notAppropriate,
       reason:
         "A router reboot is not appropriate if you cannot safely reach the router and modem."
     };
@@ -131,29 +136,29 @@ export function decideRebootAppropriateness(
 
   if (answers.acceptsTemporaryInterruption === false) {
     return {
-      status: "not_appropriate",
+      status: qualificationStatus.notAppropriate,
       reason:
         "A router reboot is not appropriate right now because it will briefly disconnect the internet."
     };
   }
 
   if (
-    answers.deviceImpact === "multiple_devices" &&
-    answers.connectivityScope === "general_connectivity" &&
-    answers.equipmentStatus === "powered_and_connected" &&
+    answers.deviceImpact === deviceImpact.multipleDevices &&
+    answers.connectivityScope === connectivityScope.generalConnectivity &&
+    answers.equipmentStatus === equipmentStatus.poweredAndConnected &&
     answers.knownOutage === false &&
     answers.canAccessEquipment === true &&
     answers.acceptsTemporaryInterruption === true
   ) {
     return {
-      status: "appropriate",
+      status: qualificationStatus.appropriate,
       reason:
         "Multiple devices have a general connectivity issue, the equipment is connected, there is no known outage, and the user can safely reboot now."
     };
   }
 
   return {
-    status: "unknown",
+    status: qualificationStatus.unknown,
     reason: "More information is needed before recommending a router reboot."
   };
 }
@@ -265,7 +270,7 @@ function inferDeviceImpact(input: string): Partial<QualificationAnswers> | null 
       "all of them"
     ])
   ) {
-    return { deviceImpact: "multiple_devices" };
+    return { deviceImpact: deviceImpact.multipleDevices };
   }
 
   if (
@@ -280,7 +285,7 @@ function inferDeviceImpact(input: string): Partial<QualificationAnswers> | null 
       "just my laptop"
     ])
   ) {
-    return { deviceImpact: "single_device" };
+    return { deviceImpact: deviceImpact.singleDevice };
   }
 
   return null;
@@ -304,7 +309,7 @@ function inferConnectivityScope(
       "only email"
     ])
   ) {
-    return { connectivityScope: "specific_service" };
+    return { connectivityScope: connectivityScope.specificService };
   }
 
   if (
@@ -324,7 +329,7 @@ function inferConnectivityScope(
       "cant connect"
     ])
   ) {
-    return { connectivityScope: "general_connectivity" };
+    return { connectivityScope: connectivityScope.generalConnectivity };
   }
 
   return null;
@@ -347,17 +352,17 @@ function inferEquipmentStatus(
       "cables are out"
     ])
   ) {
-    return { equipmentStatus: "power_or_cable_issue" };
+    return { equipmentStatus: equipmentStatus.powerOrCableIssue };
   }
 
   const answer = parseYesNo(input);
 
   if (answer === true) {
-    return { equipmentStatus: "powered_and_connected" };
+    return { equipmentStatus: equipmentStatus.poweredAndConnected };
   }
 
   if (answer === false) {
-    return { equipmentStatus: "power_or_cable_issue" };
+    return { equipmentStatus: equipmentStatus.powerOrCableIssue };
   }
 
   return null;

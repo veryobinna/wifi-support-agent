@@ -1,22 +1,22 @@
 import { z } from "zod";
-import { qualificationQuestionIds } from "@/lib/conversation/qualification";
-import { conversationStates } from "@/lib/conversation/state";
+import {
+  chatRoles,
+  connectivityScopeValues,
+  conversationStates,
+  deviceImpactValues,
+  equipmentStatusValues,
+  qualificationQuestionIds
+} from "@/lib/conversation/constants";
 
-const chatRoleSchema = z.enum(["assistant", "user"]);
-
+const chatRoleSchema = z.enum(chatRoles);
 const conversationStateSchema = z.enum(conversationStates);
-
 const qualificationQuestionIdSchema = z.enum(qualificationQuestionIds);
 
 const qualificationAnswersSchema = z
   .object({
-    deviceImpact: z.enum(["single_device", "multiple_devices"]).optional(),
-    connectivityScope: z
-      .enum(["general_connectivity", "specific_service"])
-      .optional(),
-    equipmentStatus: z
-      .enum(["powered_and_connected", "power_or_cable_issue"])
-      .optional(),
+    deviceImpact: z.enum(deviceImpactValues).optional(),
+    connectivityScope: z.enum(connectivityScopeValues).optional(),
+    equipmentStatus: z.enum(equipmentStatusValues).optional(),
     knownOutage: z.boolean().optional(),
     canAccessEquipment: z.boolean().optional(),
     acceptsTemporaryInterruption: z.boolean().optional()

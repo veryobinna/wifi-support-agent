@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { chatRole } from "@/lib/conversation/constants";
 import { advanceConversation } from "@/lib/conversation/engine";
 import { chatRequestSchema } from "./schema";
 import {
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
   const response: ChatResponse = {
     message: {
       id: crypto.randomUUID(),
-      role: "assistant",
+      role: chatRole.assistant,
       content: turn.assistantMessage
     },
     state: turn.session.state,
@@ -73,7 +74,7 @@ async function parseChatRequest(request: Request): Promise<ParsedChatRequest> {
   const { messages } = parsedBody.data;
   const latestMessage = messages.at(-1);
 
-  if (!latestMessage || latestMessage.role !== "user") {
+  if (!latestMessage || latestMessage.role !== chatRole.user) {
     return {
       ok: false,
       error: "The latest chat message must be from the user."

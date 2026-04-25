@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { chatRole } from "@/lib/conversation/constants";
 import {
   createInitialConversationSession,
   type ChatResponse,
@@ -10,7 +11,7 @@ import { MessageBubble, type Message } from "./MessageBubble";
 
 const welcomeMessage: Message = {
   id: "welcome",
-  role: "assistant",
+  role: chatRole.assistant,
   content:
     "Hi. I can help decide whether rebooting your Linksys EA6350 router is the right next step. What WiFi or internet issue are you seeing?"
 };
@@ -42,7 +43,7 @@ export function ChatWindow() {
 
     const userMessage: Message = {
       id: createMessageId(),
-      role: "user",
+      role: chatRole.user,
       content: trimmedInput
     };
 
