@@ -22,7 +22,10 @@ describe("LLM client", () => {
         session: createInitialConversationSession()
       });
 
-      expect(response).toBe("Do not press the Reset button.");
+      expect(response).toEqual({
+        assistantMessage: "Do not press the Reset button.",
+        source: "fallback"
+      });
       expect(fetchMock).not.toHaveBeenCalled();
     } finally {
       if (originalApiKey === undefined) {

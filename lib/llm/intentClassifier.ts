@@ -19,18 +19,26 @@ export type ClassifyUserIntentInput = {
   session: ConversationSession;
 };
 
+export type ClassifyUserIntentResult = {
+  intent: UserIntent;
+  source: "llm" | "fallback";
+};
+
 const openaiResponsesUrl = "https://api.openai.com/v1/responses";
 const defaultModel = "gpt-4o-mini";
 
 export async function classifyUserIntent({
   userInput,
   session
-}: ClassifyUserIntentInput): Promise<UserIntent> {
+}: ClassifyUserIntentInput): Promise<ClassifyUserIntentResult> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   const fallbackIntent = fallbackClassifyUserIntent({ userInput, session });
 
   if (!apiKey || process.env.NODE_ENV === "test") {
-    return fallbackIntent;
+    return {
+      intent: fallbackIntent,
+      source: "fallback"
+    };
   }
 
   try {
@@ -52,13 +60,39 @@ export async function classifyUserIntent({
     });
 
     if (!response.ok) {
-      return fallbackIntent;
+      return {
+        intent: fallbackIntent,
+        source: "fallback"
+      };
     }
 
     const outputText = extractOutputText((await response.json()) as unknown);
-    return outputText ? parseIntent(outputText) ?? fallbackIntent : fallbackIntent;
+
+    if (!outputText) {
+      return {
+        intent: fallbackIntent,
+        source: "fallback"
+      };
+    }
+
+    const parsedIntent = parseIntent(outputText);
+
+    if (!parsedIntent) {
+      return {
+        intent: fallbackIntent,
+        source: "fallback"
+      };
+    }
+
+    return {
+      intent: parsedIntent,
+      source: "llm"
+    };
   } catch {
-    return fallbackIntent;
+    return {
+      intent: fallbackIntent,
+      source: "fallback"
+    };
   }
 }
 

@@ -3,6 +3,7 @@ import { chatRole } from "@/lib/conversation/constants";
 import { advanceConversation } from "@/lib/conversation/engine";
 import { generateAssistantResponse } from "@/lib/llm/client";
 import { classifyUserIntent } from "@/lib/llm/intentClassifier";
+import { logConversationTurn } from "@/lib/observability/logger";
 import { chatRequestSchema } from "./schema";
 import {
   createInitialConversationSession,
@@ -26,23 +27,40 @@ export async function POST(request: Request) {
   }
 
   const { latestUserMessage, session } = parsedRequest;
-  const intent = await classifyUserIntent({
+  const previousState = session.state;
+  const previousQuestionId = session.currentQuestionId;
+  const turnId = crypto.randomUUID();
+
+  const classifiedIntent = await classifyUserIntent({
     userInput: latestUserMessage.content,
     session
   });
-  const turn = advanceConversation(session, intent);
-  const assistantMessage = await generateAssistantResponse({
+  const turn = advanceConversation(session, classifiedIntent.intent);
+  const assistantResponse = await generateAssistantResponse({
     userInput: latestUserMessage.content,
-    intent,
+    intent: classifiedIntent.intent,
     draftResponse: turn.assistantMessage,
     session: turn.session
+  });
+
+  logConversationTurn({
+    turnId,
+    userInput: latestUserMessage.content,
+    intent: classifiedIntent.intent,
+    previousState,
+    nextState: turn.session.state,
+    previousQuestionId,
+    nextQuestionId: turn.session.currentQuestionId,
+    draftResponse: turn.assistantMessage,
+    classifierSource: classifiedIntent.source,
+    responseSource: assistantResponse.source
   });
 
   const response: ChatResponse = {
     message: {
       id: crypto.randomUUID(),
       role: chatRole.assistant,
-      content: assistantMessage
+      content: assistantResponse.assistantMessage
     },
     state: turn.session.state,
     session: turn.session

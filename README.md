@@ -38,6 +38,12 @@ raw user message
 
 If no API key is configured, a small fallback classifier handles local/demo intent parsing. Unit tests pass `UserIntent` objects directly to the engine and do not call the LLM.
 
+## Observability
+
+The API emits one structured JSON log per chat turn to help debug intent-classification and state-transition issues. Each event includes the classified intent, previous and next state, previous and next question id, deterministic draft response, and whether the classifier and response layer used the LLM path or fallback path.
+
+User text is not logged by default. Set `LOG_USER_TEXT=true` in `.env.local` if you need raw user input in the logs while debugging locally.
+
 ## Project Structure
 
 ```text
@@ -45,6 +51,7 @@ app/                  Next.js pages and API routes
 components/           Chat UI components
 lib/conversation/     Conversation state, qualification, and reboot flow
 lib/llm/              Intent classifier and response generation
+lib/observability/    Structured logging for debugging turn behavior
 tests/                Unit tests
 ```
 
