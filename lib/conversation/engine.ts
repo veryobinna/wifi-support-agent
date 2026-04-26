@@ -369,22 +369,10 @@ function answerQualificationQuestion(question: QualificationQuestion): string {
 }
 
 function isStepCompletion(
-  session: ConversationSession,
+  _session: ConversationSession,
   intent: UserIntent
 ): boolean {
-  if (intent.type !== "completion") {
-    return false;
-  }
-
-  const step = rebootSteps[session.rebootStepIndex];
-  const minimumSeconds = step?.requiredWaitSeconds ?? null;
-  const waitedSeconds = intent.waitedSeconds;
-
-  if (minimumSeconds === null || waitedSeconds === undefined) {
-    return true;
-  }
-
-  return waitedSeconds >= minimumSeconds;
+  return intent.type === "completion";
 }
 
 function getQualificationAnswerForQuestion(

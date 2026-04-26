@@ -81,7 +81,7 @@ describe("fallback intent classifier", () => {
     });
   });
 
-  it("keeps waited time as structured completion detail", () => {
+  it("classifies waited time wording as step completion", () => {
     const intent = fallbackClassifyUserIntent({
       userInput: "I have waited 50 seconds",
       session: {
@@ -91,10 +91,7 @@ describe("fallback intent classifier", () => {
       }
     });
 
-    expect(intent).toMatchObject({
-      type: "completion",
-      waitedSeconds: 50
-    });
+    expect(intent).toMatchObject({ type: "completion" });
   });
 
   it("classifies reconnect wording as step completion", () => {

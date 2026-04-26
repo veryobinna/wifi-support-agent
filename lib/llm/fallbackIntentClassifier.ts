@@ -26,11 +26,8 @@ export function fallbackClassifyUserIntent({
   }
 
   if (isCompletion(normalized, session.state)) {
-    const waitedSeconds = getWaitedSeconds(normalized);
-
     return {
       type: "completion",
-      ...(waitedSeconds !== null ? { waitedSeconds } : {}),
       text: userInput
     };
   }
@@ -257,20 +254,3 @@ function isQuestion(rawInput: string, normalizedInput: string): boolean {
   );
 }
 
-function getWaitedSeconds(normalizedInput: string): number | null {
-  const match = normalizedInput.match(
-    /(\d+)\s*(second|seconds|sec|secs|minute|minutes|min|mins)?/
-  );
-
-  if (!match) {
-    return null;
-  }
-
-  const amount = Number(match[1]);
-
-  if (!Number.isFinite(amount)) {
-    return null;
-  }
-
-  return match[2]?.startsWith("min") ? amount * 60 : amount;
-}

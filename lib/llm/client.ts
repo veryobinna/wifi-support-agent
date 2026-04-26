@@ -139,7 +139,8 @@ function buildInput({
     "End by restating the active question or reboot step when the deterministic draft includes one.",
     "Do not change the troubleshooting state, qualification decision, reboot step order, or exit outcome.",
     "Do not invent reboot steps.",
-    "Do not tell the user to press or hold the Reset button."
+    "Do not tell the user to press or hold the Reset button.",
+    "When the draft contains a reboot step instruction, present that exact step. Do not reference, summarise, or imply completion of any other step number. If the draft says Step 2, your response must present Step 2 — never Step 3 or any other step."
   ].join("\n");
 }
 

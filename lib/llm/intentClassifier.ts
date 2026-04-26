@@ -110,16 +110,13 @@ const intentResponseFormat = {
         enum: ["question", "answer", "completion", "greeting", "unknown"]
       },
       value: {
-        enum: [...answerValues]
+        anyOf: [{ enum: [...answerValues] }, { type: "null" }]
       },
       text: {
-        type: "string"
+        anyOf: [{ type: "string" }, { type: "null" }]
       },
-      waitedSeconds: {
-        type: "number"
-      }
     },
-    required: ["type"]
+    required: ["type", "value", "text"]
   }
 };
 
@@ -128,12 +125,13 @@ function buildClassifierInstructions(): string {
     "Classify one user message for a deterministic WiFi support workflow.",
     "Return only JSON matching the provided schema.",
     "Never choose the next state, decide reboot appropriateness, or write qualification fields.",
-    "Use type question for clarification requests, greeting for greetings, completion for completed reboot steps, unknown when unclear.",
+    "Use type question for clarification requests, greeting for greetings, unknown when unclear.",
     "Use type answer with value yes, no, unsure, single_device, multiple_devices, general_connectivity, or specific_service.",
-    "At START, use greeting for greetings and unknown for non-problem messages. Use answer only when the user describes a WiFi, internet, or connectivity issue.",
+    "Use type completion only when the current state starts with REBOOT_STEP or is REBOOT_INTRO. Never use completion in START, QUALIFYING, or CHECK_RESOLUTION states.",
+    "Never use completion if the message contains negation or indicates the step is not finished, such as 'not done', 'not done yet', 'still waiting', 'haven't done it', or similar. Classify those as unknown instead.",
+    "At START, use greeting for greetings and unknown for non-problem messages. When the user describes any WiFi or internet problem (slow internet, no connection, dropped signal, etc.), use answer with value general_connectivity unless they clearly name a single app or website, in which case use specific_service.",
     "For connectivity scope, classify 'not just one app', 'every app', 'all websites', 'everything', and 'nothing loads' as general_connectivity.",
-    "Classify 'only one app', 'only one website', 'just Netflix', 'just YouTube', or another single named app/site as specific_service.",
-    "For completed wait steps, set waitedSeconds when the user states a duration."
+    "Classify 'only one app', 'only one website', 'just Netflix', 'just YouTube', or another single named app/site as specific_service."
   ].join("\n");
 }
 
@@ -236,15 +234,8 @@ function normalizeIntent(value: unknown): UserIntent | null {
   }
 
   if (value.type === "completion") {
-    const waitedSeconds =
-      typeof value.waitedSeconds === "number" &&
-      Number.isFinite(value.waitedSeconds)
-        ? value.waitedSeconds
-        : undefined;
-
     return {
       type: "completion",
-      ...(waitedSeconds !== undefined ? { waitedSeconds } : {}),
       ...(text ? { text } : {})
     };
   }

@@ -24,7 +24,6 @@ export type AnswerIntent = {
 
 export type CompletionIntent = {
   type: "completion";
-  waitedSeconds?: number;
   text?: string;
 };
 
