@@ -18,9 +18,20 @@ export type GenerateAssistantResponseInput = {
   session: ConversationSession;
 };
 
+export type ResponseSource = "llm" | "fallback";
+
+export type ResponseReason =
+  | "llm_success"
+  | "test_mode"
+  | "no_api_key"
+  | "http_error"
+  | "empty_output"
+  | "request_failed";
+
 export type GenerateAssistantResponseResult = {
   assistantMessage: string;
-  source: "llm" | "fallback";
+  source: ResponseSource;
+  reason: ResponseReason;
 };
 
 const openaiResponsesUrl = "https://api.openai.com/v1/responses";
@@ -34,11 +45,12 @@ export async function generateAssistantResponse({
 }: GenerateAssistantResponseInput): Promise<GenerateAssistantResponseResult> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
 
-  if (!apiKey || process.env.NODE_ENV === "test") {
-    return {
-      assistantMessage: draftResponse,
-      source: "fallback"
-    };
+  if (process.env.NODE_ENV === "test") {
+    return buildFallbackResult(draftResponse, "test_mode");
+  }
+
+  if (!apiKey) {
+    return buildFallbackResult(draftResponse, "no_api_key");
   }
 
   try {
@@ -62,32 +74,35 @@ export async function generateAssistantResponse({
     });
 
     if (!response.ok) {
-      return {
-        assistantMessage: draftResponse,
-        source: "fallback"
-      };
+      return buildFallbackResult(draftResponse, "http_error");
     }
 
     const data = (await response.json()) as unknown;
     const assistantMessage = extractOutputText(data);
 
     if (!assistantMessage) {
-      return {
-        assistantMessage: draftResponse,
-        source: "fallback"
-      };
+      return buildFallbackResult(draftResponse, "empty_output");
     }
 
     return {
       assistantMessage,
-      source: "llm"
+      source: "llm",
+      reason: "llm_success"
     };
   } catch {
-    return {
-      assistantMessage: draftResponse,
-      source: "fallback"
-    };
+    return buildFallbackResult(draftResponse, "request_failed");
   }
+}
+
+function buildFallbackResult(
+  assistantMessage: string,
+  reason: Exclude<ResponseReason, "llm_success">
+): GenerateAssistantResponseResult {
+  return {
+    assistantMessage,
+    source: "fallback",
+    reason
+  };
 }
 
 function buildInstructions(): string {

@@ -1,5 +1,7 @@
 import type { UserIntent } from "@/lib/conversation/intent";
 import type { ConversationState } from "@/lib/conversation/state";
+import type { ClassifierReason, ClassifierSource } from "@/lib/llm/intentClassifier";
+import type { ResponseReason, ResponseSource } from "@/lib/llm/client";
 
 export type ConversationTurnLogEvent = {
   turnId: string;
@@ -10,8 +12,10 @@ export type ConversationTurnLogEvent = {
   previousQuestionId: string | null;
   nextQuestionId: string | null;
   draftResponse: string;
-  classifierSource: "llm" | "fallback";
-  responseSource: "llm" | "fallback";
+  classifierSource: ClassifierSource;
+  classifierReason: ClassifierReason;
+  responseSource: ResponseSource;
+  responseReason: ResponseReason;
 };
 
 export function logConversationTurn(event: ConversationTurnLogEvent): void {
@@ -30,7 +34,9 @@ export function logConversationTurn(event: ConversationTurnLogEvent): void {
     nextQuestionId: event.nextQuestionId,
     draftResponse: event.draftResponse,
     classifierSource: event.classifierSource,
-    responseSource: event.responseSource
+    classifierReason: event.classifierReason,
+    responseSource: event.responseSource,
+    responseReason: event.responseReason
   };
 
   if (process.env.LOG_USER_TEXT === "true") {
