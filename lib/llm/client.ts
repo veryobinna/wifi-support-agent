@@ -2,6 +2,7 @@ import {
   linksysSmartWifiRebootSteps,
   rebootSteps
 } from "@/lib/conversation/rebootSteps";
+import { rebootStepStates } from "@/lib/conversation/constants";
 import { systemPrompt } from "@/lib/llm/systemPrompt";
 import type { UserIntent } from "@/lib/conversation/intent";
 import type { ConversationSession } from "@/lib/conversation/state";
@@ -167,7 +168,12 @@ function buildManualContext(): string {
 function getCurrentRebootStepText(session: ConversationSession): string {
   const step = rebootSteps[session.rebootStepIndex];
 
-  if (!session.state.startsWith("REBOOT_STEP_") || !step) {
+  if (
+    !rebootStepStates.includes(
+      session.state as (typeof rebootStepStates)[number]
+    ) ||
+    !step
+  ) {
     return "none";
   }
 

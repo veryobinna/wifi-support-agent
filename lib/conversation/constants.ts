@@ -35,6 +35,18 @@ export const conversationStates = [
   conversationState.unresolvedExit
 ] as const;
 
+export const confirmationAnswer = {
+  yes: "yes",
+  no: "no",
+  unsure: "unsure"
+} as const;
+
+export const confirmationAnswerValues = [
+  confirmationAnswer.yes,
+  confirmationAnswer.no,
+  confirmationAnswer.unsure
+] as const;
+
 export const deviceImpact = {
   singleDevice: "single_device",
   multipleDevices: "multiple_devices"

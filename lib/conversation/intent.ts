@@ -1,11 +1,13 @@
+import {
+  confirmationAnswerValues,
+  connectivityScopeValues,
+  deviceImpactValues
+} from "./constants";
+
 export const answerValues = [
-  "yes",
-  "no",
-  "unsure",
-  "single_device",
-  "multiple_devices",
-  "general_connectivity",
-  "specific_service"
+  ...confirmationAnswerValues,
+  ...deviceImpactValues,
+  ...connectivityScopeValues
 ] as const;
 
 export type AnswerValue = (typeof answerValues)[number];

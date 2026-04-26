@@ -3,6 +3,7 @@ import {
   type AnswerValue,
   type UserIntent
 } from "@/lib/conversation/intent";
+import { rebootStepStates } from "@/lib/conversation/constants";
 import {
   getNextQualificationQuestion,
   getQualificationQuestion
@@ -253,7 +254,7 @@ function buildFallbackResult(
 }
 
 function isRebootStepState(state: ConversationState): boolean {
-  return state.startsWith("REBOOT_STEP_");
+  return rebootStepStates.includes(state as (typeof rebootStepStates)[number]);
 }
 
 function extractOutputText(data: unknown): string | null {

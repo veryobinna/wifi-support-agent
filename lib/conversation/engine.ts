@@ -1,4 +1,5 @@
 import {
+  confirmationAnswer,
   connectivityScope,
   conversationState,
   deviceImpact,
@@ -206,7 +207,7 @@ function startRebootWhenReady(
 ): ConversationTurn {
   const confirmation = getConfirmationAnswer(intent);
 
-  if (confirmation === "no") {
+  if (confirmation === confirmationAnswer.no) {
     return {
       session: {
         ...session,
@@ -225,7 +226,7 @@ function startRebootWhenReady(
     };
   }
 
-  if (confirmation !== "yes" && intent.type !== "completion") {
+  if (confirmation !== confirmationAnswer.yes && intent.type !== "completion") {
     return {
       session,
       assistantMessage:
@@ -300,7 +301,7 @@ function checkResolution(
 ): ConversationTurn {
   const confirmation = getConfirmationAnswer(intent);
 
-  if (confirmation === "yes") {
+  if (confirmation === confirmationAnswer.yes) {
     return {
       session: {
         ...session,
@@ -311,7 +312,7 @@ function checkResolution(
     };
   }
 
-  if (confirmation === "no") {
+  if (confirmation === confirmationAnswer.no) {
     return {
       session: {
         ...session,
@@ -388,11 +389,11 @@ function getMappedQualificationAnswer(
   value: AnswerValue
 ): Partial<QualificationAnswers> | null {
   if (question.id === "deviceImpact") {
-    if (value === "single_device") {
+    if (value === deviceImpact.singleDevice) {
       return { deviceImpact: deviceImpact.singleDevice };
     }
 
-    if (value === "multiple_devices") {
+    if (value === deviceImpact.multipleDevices) {
       return { deviceImpact: deviceImpact.multipleDevices };
     }
 
@@ -400,11 +401,11 @@ function getMappedQualificationAnswer(
   }
 
   if (question.id === "connectivityScope") {
-    if (value === "general_connectivity") {
+    if (value === connectivityScope.generalConnectivity) {
       return { connectivityScope: connectivityScope.generalConnectivity };
     }
 
-    if (value === "specific_service") {
+    if (value === connectivityScope.specificService) {
       return { connectivityScope: connectivityScope.specificService };
     }
 
@@ -418,11 +419,11 @@ function getMappedQualificationAnswer(
   }
 
   if (question.id === "equipmentStatus") {
-    if (confirmation === "yes") {
+    if (confirmation === confirmationAnswer.yes) {
       return { equipmentStatus: equipmentStatus.poweredAndConnected };
     }
 
-    if (confirmation === "no") {
+    if (confirmation === confirmationAnswer.no) {
       return { equipmentStatus: equipmentStatus.powerOrCableIssue };
     }
 
@@ -431,25 +432,25 @@ function getMappedQualificationAnswer(
 
   if (question.id === "knownOutage") {
     return {
-      knownOutage: confirmation === "yes"
+      knownOutage: confirmation === confirmationAnswer.yes
     };
   }
 
   if (question.id === "canAccessEquipment") {
-    if (confirmation === "unsure") {
+    if (confirmation === confirmationAnswer.unsure) {
       return null;
     }
 
-    return { canAccessEquipment: confirmation === "yes" };
+    return { canAccessEquipment: confirmation === confirmationAnswer.yes };
   }
 
   if (question.id === "acceptsTemporaryInterruption") {
-    if (confirmation === "unsure") {
+    if (confirmation === confirmationAnswer.unsure) {
       return null;
     }
 
     return {
-      acceptsTemporaryInterruption: confirmation === "yes"
+      acceptsTemporaryInterruption: confirmation === confirmationAnswer.yes
     };
   }
 
@@ -465,7 +466,11 @@ function getConfirmationAnswer(intent: UserIntent): ConfirmationAnswer | null {
 }
 
 function asConfirmationAnswer(value: AnswerValue): ConfirmationAnswer | null {
-  if (value === "yes" || value === "no" || value === "unsure") {
+  if (
+    value === confirmationAnswer.yes ||
+    value === confirmationAnswer.no ||
+    value === confirmationAnswer.unsure
+  ) {
     return value;
   }
 

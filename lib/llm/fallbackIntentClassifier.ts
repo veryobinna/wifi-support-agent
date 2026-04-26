@@ -1,4 +1,10 @@
 import type { AnswerValue, UserIntent } from "@/lib/conversation/intent";
+import {
+  connectivityScope,
+  conversationState,
+  deviceImpact,
+  rebootStepStates
+} from "@/lib/conversation/constants";
 import type {
   ConversationSession,
   ConversationState
@@ -16,15 +22,15 @@ export function fallbackClassifyUserIntent({
 }: FallbackClassifyUserIntentInput): UserIntent {
   const normalized = normalizeInput(userInput);
 
-  if (session.state === "START") {
+  if (session.state === conversationState.start) {
     return classifyAtStart(normalized, userInput);
   }
 
-  if (session.state === "QUALIFYING") {
+  if (session.state === conversationState.qualifying) {
     return classifyAtQualifying(normalized, userInput, session.currentQuestionId);
   }
 
-  if (session.state === "REBOOT_INTRO") {
+  if (session.state === conversationState.rebootIntro) {
     return classifyConfirmation(normalized, userInput);
   }
 
@@ -32,7 +38,7 @@ export function fallbackClassifyUserIntent({
     return classifyAtRebootStep(normalized, userInput, session.state);
   }
 
-  if (session.state === "CHECK_RESOLUTION") {
+  if (session.state === conversationState.checkResolution) {
     return classifyConfirmation(normalized, userInput);
   }
 
@@ -145,7 +151,7 @@ function getDeviceImpactValue(normalizedInput: string): AnswerValue | null {
       "whole house"
     ])
   ) {
-    return "multiple_devices";
+    return deviceImpact.multipleDevices;
   }
 
   if (
@@ -157,7 +163,7 @@ function getDeviceImpactValue(normalizedInput: string): AnswerValue | null {
       "only my laptop"
     ])
   ) {
-    return "single_device";
+    return deviceImpact.singleDevice;
   }
 
   return null;
@@ -180,7 +186,7 @@ function getConnectivityScopeValue(
       "no internet"
     ])
   ) {
-    return "general_connectivity";
+    return connectivityScope.generalConnectivity;
   }
 
   if (
@@ -192,7 +198,7 @@ function getConnectivityScopeValue(
       "just email"
     ])
   ) {
-    return "specific_service";
+    return connectivityScope.specificService;
   }
 
   return null;
@@ -269,7 +275,7 @@ function isCompletion(
   }
 
   return (
-    state.startsWith("REBOOT_STEP_") &&
+    rebootStepStates.includes(state as (typeof rebootStepStates)[number]) &&
     hasAny(normalizedInput, [
       "waited",
       "reconnected",
@@ -328,5 +334,5 @@ function isQuestion(rawInput: string, normalizedInput: string): boolean {
 }
 
 function isRebootStepState(state: ConversationState): boolean {
-  return state.startsWith("REBOOT_STEP_");
+  return rebootStepStates.includes(state as (typeof rebootStepStates)[number]);
 }
