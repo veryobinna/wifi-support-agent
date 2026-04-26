@@ -6,6 +6,7 @@ import { rebootStepStates } from "@/lib/conversation/constants";
 import { systemPrompt } from "@/lib/llm/systemPrompt";
 import type { UserIntent } from "@/lib/conversation/intent";
 import type { ConversationSession } from "@/lib/conversation/state";
+import { logLlmFailure } from "@/lib/observability/logger";
 
 export type LlmMessage = {
   role: "system" | "user" | "assistant";
@@ -13,6 +14,7 @@ export type LlmMessage = {
 };
 
 export type GenerateAssistantResponseInput = {
+  turnId?: string;
   userInput: string;
   intent: UserIntent;
   draftResponse: string;
@@ -40,12 +42,14 @@ const openaiResponsesUrl = "https://api.openai.com/v1/responses";
 const defaultModel = "gpt-4o-mini";
 
 export async function generateAssistantResponse({
+  turnId,
   userInput,
   intent,
   draftResponse,
   session
 }: GenerateAssistantResponseInput): Promise<GenerateAssistantResponseResult> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
+  const model = process.env.OPENAI_MODEL?.trim() || defaultModel;
 
   if (process.env.NODE_ENV === "test") {
     return buildFallbackResult(draftResponse, "test_mode");
@@ -63,7 +67,7 @@ export async function generateAssistantResponse({
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL?.trim() || defaultModel,
+        model,
         instructions: buildInstructions(),
         input: buildInput({
           userInput,
@@ -76,6 +80,14 @@ export async function generateAssistantResponse({
     });
 
     if (!response.ok) {
+      logLlmFailure({
+        event: "llm.response_failure",
+        turnId,
+        reason: "http_error",
+        model,
+        httpStatus: response.status,
+        httpStatusText: response.statusText
+      });
       return buildFallbackResult(draftResponse, "http_error");
     }
 
@@ -83,6 +95,12 @@ export async function generateAssistantResponse({
     const assistantMessage = extractOutputText(data);
 
     if (!assistantMessage) {
+      logLlmFailure({
+        event: "llm.response_failure",
+        turnId,
+        reason: "empty_output",
+        model
+      });
       return buildFallbackResult(draftResponse, "empty_output");
     }
 
@@ -91,7 +109,14 @@ export async function generateAssistantResponse({
       source: "llm",
       reason: "llm_success"
     };
-  } catch {
+  } catch (error) {
+    logLlmFailure({
+      event: "llm.response_failure",
+      turnId,
+      reason: "request_failed",
+      model,
+      error
+    });
     return buildFallbackResult(draftResponse, "request_failed");
   }
 }

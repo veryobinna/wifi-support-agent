@@ -15,8 +15,10 @@ import type {
 } from "@/lib/conversation/state";
 import { getClassifierConfig, type ClassifierConfig } from "./classifierPlaybook";
 import { fallbackClassifyUserIntent } from "./fallbackIntentClassifier";
+import { logLlmFailure } from "@/lib/observability/logger";
 
 export type ClassifyUserIntentInput = {
+  turnId?: string;
   userInput: string;
   session: ConversationSession;
 };
@@ -44,11 +46,13 @@ const openaiResponsesUrl = "https://api.openai.com/v1/responses";
 const defaultModel = "gpt-4o-mini";
 
 export async function classifyUserIntent({
+  turnId,
   userInput,
   session
 }: ClassifyUserIntentInput): Promise<ClassifyUserIntentResult> {
   const fallbackIntent = fallbackClassifyUserIntent({ userInput, session });
   const apiKey = process.env.OPENAI_API_KEY?.trim();
+  const model = process.env.OPENAI_MODEL?.trim() || defaultModel;
 
   if (process.env.NODE_ENV === "test") {
     return buildFallbackResult(fallbackIntent, "test_mode");
@@ -73,7 +77,7 @@ export async function classifyUserIntent({
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL?.trim() || defaultModel,
+        model,
         instructions: config.instructions,
         input: buildClassifierInput(userInput, session),
         text: {
@@ -84,18 +88,38 @@ export async function classifyUserIntent({
     });
 
     if (!response.ok) {
+      logLlmFailure({
+        event: "llm.classifier_failure",
+        turnId,
+        reason: "http_error",
+        model,
+        httpStatus: response.status,
+        httpStatusText: response.statusText
+      });
       return buildFallbackResult(fallbackIntent, "http_error");
     }
 
     const outputText = extractOutputText((await response.json()) as unknown);
 
     if (!outputText) {
+      logLlmFailure({
+        event: "llm.classifier_failure",
+        turnId,
+        reason: "empty_output",
+        model
+      });
       return buildFallbackResult(fallbackIntent, "empty_output");
     }
 
     const parsedIntent = parseIntent(outputText, config);
 
     if (!parsedIntent.ok) {
+      logLlmFailure({
+        event: "llm.classifier_failure",
+        turnId,
+        reason: parsedIntent.reason,
+        model
+      });
       return buildFallbackResult(fallbackIntent, parsedIntent.reason);
     }
 
@@ -104,7 +128,14 @@ export async function classifyUserIntent({
       source: "llm",
       reason: "llm_success"
     };
-  } catch {
+  } catch (error) {
+    logLlmFailure({
+      event: "llm.classifier_failure",
+      turnId,
+      reason: "request_failed",
+      model,
+      error
+    });
     return buildFallbackResult(fallbackIntent, "request_failed");
   }
 }

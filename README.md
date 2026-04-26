@@ -76,7 +76,7 @@ The six power-cord steps are sourced directly from the Linksys EA6350 manual. Th
 
 ## Observability
 
-Each API turn emits one structured JSON log line including:
+Each successful API turn emits one structured JSON log line including:
 - classified intent
 - previous and next conversation state
 - previous and next qualification question
@@ -99,6 +99,12 @@ Each API turn emits one structured JSON log line including:
 User text is not logged by default. Set `LOG_USER_TEXT=true` in `.env.local` for local debugging.
 
 Assistant text is also omitted by default. Set `LOG_ASSISTANT_TEXT=true` if you need to compare the deterministic draft with the final assistant response during local debugging.
+
+The app also emits small structured error events for:
+- invalid chat requests
+- unexpected route failures
+- LLM classifier failures
+- LLM response-generation failures
 
 ## Environment Variables
 
