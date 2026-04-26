@@ -299,31 +299,17 @@ describe("conversation flow transcripts", () => {
     expect(turn.assistantMessage).toContain("Step 1");
   });
 
-  it("advances a wait step when the user waited at least the required time", () => {
+  it("advances a wait step on completion", () => {
     const session: ConversationSession = {
       ...createInitialConversationSession(),
       state: "REBOOT_STEP_2",
       rebootStepIndex: 1
     };
 
-    const turn = advanceConversation(session, completion(50));
+    const turn = advanceConversation(session, completion());
 
     expect(turn.session.state).toBe("REBOOT_STEP_3");
     expect(turn.assistantMessage).toContain("Reconnect the modem power cord");
-  });
-
-  it("does not advance a wait step when the user waited too briefly", () => {
-    const session: ConversationSession = {
-      ...createInitialConversationSession(),
-      state: "REBOOT_STEP_2",
-      rebootStepIndex: 1
-    };
-
-    const turn = advanceConversation(session, completion(5));
-
-    expect(turn.session.state).toBe("REBOOT_STEP_2");
-    expect(turn.assistantMessage).toContain("not complete yet");
-    expect(turn.assistantMessage).toContain("Step 2");
   });
 
   it("does not treat ok as reboot step completion", () => {
@@ -400,11 +386,8 @@ function answer(value: AnswerValue): UserIntent {
   };
 }
 
-function completion(waitedSeconds?: number): UserIntent {
-  return {
-    type: "completion",
-    ...(waitedSeconds !== undefined ? { waitedSeconds } : {})
-  };
+function completion(): UserIntent {
+  return { type: "completion" };
 }
 
 function question(text: string): UserIntent {
