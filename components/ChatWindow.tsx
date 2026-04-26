@@ -111,7 +111,6 @@ export function ChatWindow() {
       setError("Something went wrong. Please try again.");
     } finally {
       setIsSending(false);
-      textareaRef.current?.focus();
     }
   }
 
@@ -165,7 +164,6 @@ export function ChatWindow() {
             onKeyDown={handleKeyDown}
             placeholder="Describe your WiFi issue…"
             aria-label="Message"
-            disabled={isSending}
           />
           <button
             className="send-button"

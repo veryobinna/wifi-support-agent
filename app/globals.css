@@ -320,11 +320,6 @@ button:disabled {
   box-shadow: 0 0 0 3px rgb(15 118 110 / 0.12);
 }
 
-.chat-input:disabled {
-  background: #f8fafc;
-  color: var(--muted);
-  cursor: not-allowed;
-}
 
 .send-button {
   width: 44px;
