@@ -9,7 +9,7 @@ import type {
   ConversationSession,
   ConversationState
 } from "@/lib/conversation/state";
-import { hasAny, normalizeInput } from "@/lib/conversation/text";
+import { hasAny, normalizeInput } from "@/lib/conversation/textMatching";
 
 export type FallbackClassifyUserIntentInput = {
   userInput: string;
