@@ -1,6 +1,8 @@
 # WiFi Support Agent
 
-A small LLM-assisted chat app that helps a user troubleshoot WiFi connectivity issues and, when appropriate, walks them through rebooting a Linksys router.
+A small LLM-assisted chat app that helps a user troubleshoot WiFi connectivity issues and, when appropriate, walks them through rebooting a Linksys EA6350 router.
+
+Built as a take-home challenge. The goal was to produce a reliable support bot — one that asks qualifying questions, exits gracefully when a reboot is not appropriate, guides the user through the exact steps from the router manual, and handles the post-reboot resolution check.
 
 ## Tech Stack
 
@@ -8,7 +10,7 @@ A small LLM-assisted chat app that helps a user troubleshoot WiFi connectivity i
 - TypeScript
 - React
 - Vitest
-- Optional OpenAI Responses API integration
+- OpenAI Responses API (optional — app runs fully without it)
 
 ## Getting Started
 
@@ -18,50 +20,106 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Then open `http://localhost:3000`.
+Open `http://localhost:3000`.
 
-`OPENAI_API_KEY` is optional. Without it, the app uses deterministic local fallback behavior so the workflow and tests still run.
+`OPENAI_API_KEY` is optional. Without it, the app uses a keyword-based fallback classifier and deterministic draft responses, so the full conversation flow and all tests work without network access.
 
 ## Architecture
 
-The app is a deterministic support workflow with LLM assistance. The state machine owns the conversation flow, qualification updates, reboot decisions, reboot step order, and exits. The LLM is used only to interpret raw language into structured intent and to phrase/answer responses inside the current state.
+The core design decision: the LLM must not own the conversation flow. A support bot that lets a model decide whether to proceed to a reboot, skip a qualification question, or end the conversation is unreliable by design. Instead, a deterministic state machine owns all of that. The LLM has two narrowly scoped jobs:
 
-```text
+1. **Intent classification** — interpret raw user text into a typed `UserIntent` (answer, question, completion, greeting, unknown).
+2. **Response phrasing** — take a deterministic draft response and make it sound natural, or answer an inline question using manual-grounded context.
+
+```
 raw user message
--> classifyUserIntent
--> advanceConversation(session, intent)
--> generateAssistantResponse
--> API response
+  → classifyUserIntent          (LLM or fallback)
+  → advanceConversation(session, intent)   (deterministic)
+  → generateAssistantResponse   (LLM or fallback)
+  → API response
 ```
 
-`UserIntent` describes what the user said, not how to mutate state. For example, the classifier can return `answer: general_connectivity`, but only the state machine decides which qualification field to update.
+`UserIntent` describes what the user said, not how to mutate state. The classifier can return `answer: general_connectivity` but only the state machine decides which qualification field to update and what happens next.
 
-If no API key is configured, a small fallback classifier handles local/demo intent parsing. Unit tests pass `UserIntent` objects directly to the engine and do not call the LLM.
+### Conversation States
+
+```
+START
+  → QUALIFYING
+      → NOT_APPROPRIATE_EXIT   (single device / specific service / ISP outage /
+                                 equipment issue / no access / bad timing)
+      → REBOOT_INTRO
+          → REBOOT_STEP_1 … REBOOT_STEP_6
+              → CHECK_RESOLUTION
+                  → RESOLVED_EXIT
+                  → UNRESOLVED_EXIT
+```
+
+### Qualification Logic
+
+Six questions determine whether a reboot is appropriate:
+
+| Question | Disqualifying answer |
+|---|---|
+| Device impact | Single device only |
+| Connectivity scope | Specific app or website only |
+| Equipment status | Power or cable issue present |
+| Known ISP outage | Yes |
+| Can access equipment | No |
+| Accepts temporary interruption | No |
+
+All six must pass for the reboot flow to proceed.
+
+### Reboot Steps
+
+The six power-cord steps are sourced directly from the Linksys EA6350 manual. The bot explicitly warns users not to press or hold the Reset button, which distinguishes a reboot from a factory reset.
 
 ## Observability
 
-The API emits one structured JSON log per chat turn to help debug intent-classification and state-transition issues. Each event includes the classified intent, previous and next state, previous and next question id, deterministic draft response, whether the classifier and response layer used the LLM path or fallback path, and why a fallback path was used when it was.
+Each API turn emits one structured JSON log line including:
+- classified intent
+- previous and next conversation state
+- previous and next qualification question
+- deterministic draft response
+- whether the classifier and response layer used the LLM or fallback path, and why
 
-This makes it straightforward to answer questions such as:
-- did the classifier skip the LLM because there was no API key, because the app is running in test mode, or because the LLM response failed validation?
-- did the response layer fall back because the request failed or because the model returned no usable output?
+```json
+{
+  "event": "conversation.turn",
+  "intent": { "type": "answer", "value": "general_connectivity" },
+  "previousState": "START",
+  "nextState": "QUALIFYING",
+  "classifierSource": "llm",
+  "classifierReason": "llm_success",
+  "responseSource": "llm",
+  "responseReason": "llm_success"
+}
+```
 
-User text is not logged by default. Set `LOG_USER_TEXT=true` in `.env.local` if you need raw user input in the logs while debugging locally.
+User text is not logged by default. Set `LOG_USER_TEXT=true` in `.env.local` for local debugging.
+
+## Environment Variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `OPENAI_API_KEY` | No | Enables LLM intent classification and response generation |
+| `OPENAI_MODEL` | No | Override the model (default: `gpt-4o-mini`) |
+| `LOG_USER_TEXT` | No | Set to `true` to include raw user input in turn logs |
 
 ## Project Structure
 
-```text
+```
 app/                  Next.js pages and API routes
 components/           Chat UI components
-lib/conversation/     Conversation state, qualification, and reboot flow
-lib/llm/              Intent classifier and response generation
-lib/observability/    Structured logging for debugging turn behavior
+lib/conversation/     State machine, qualification, reboot steps, intent types
+lib/llm/              Intent classifier, fallback classifier, response generation
+lib/observability/    Structured turn logging
 tests/                Unit tests
 ```
 
-## Development Notes
+## Running Validation
 
-Run validation with Node 20 or newer:
+Requires Node 20 or newer.
 
 ```bash
 npm test
@@ -69,3 +127,5 @@ npm run lint
 npm run typecheck
 npm run build
 ```
+
+All tests run without network access and do not require an API key.
