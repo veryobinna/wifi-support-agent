@@ -18,6 +18,11 @@ export type GenerateAssistantResponseInput = {
   session: ConversationSession;
 };
 
+export type GenerateAssistantResponseResult = {
+  assistantMessage: string;
+  source: "llm" | "fallback";
+};
+
 const openaiResponsesUrl = "https://api.openai.com/v1/responses";
 const defaultModel = "gpt-4o-mini";
 
@@ -26,11 +31,14 @@ export async function generateAssistantResponse({
   intent,
   draftResponse,
   session
-}: GenerateAssistantResponseInput): Promise<string> {
+}: GenerateAssistantResponseInput): Promise<GenerateAssistantResponseResult> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
 
   if (!apiKey || process.env.NODE_ENV === "test") {
-    return draftResponse;
+    return {
+      assistantMessage: draftResponse,
+      source: "fallback"
+    };
   }
 
   try {
@@ -54,13 +62,31 @@ export async function generateAssistantResponse({
     });
 
     if (!response.ok) {
-      return draftResponse;
+      return {
+        assistantMessage: draftResponse,
+        source: "fallback"
+      };
     }
 
     const data = (await response.json()) as unknown;
-    return extractOutputText(data) ?? draftResponse;
+    const assistantMessage = extractOutputText(data);
+
+    if (!assistantMessage) {
+      return {
+        assistantMessage: draftResponse,
+        source: "fallback"
+      };
+    }
+
+    return {
+      assistantMessage,
+      source: "llm"
+    };
   } catch {
-    return draftResponse;
+    return {
+      assistantMessage: draftResponse,
+      source: "fallback"
+    };
   }
 }
 
