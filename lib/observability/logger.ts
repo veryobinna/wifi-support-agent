@@ -12,6 +12,7 @@ export type ConversationTurnLogEvent = {
   previousQuestionId: string | null;
   nextQuestionId: string | null;
   draftResponse: string;
+  assistantMessage: string;
   classifierSource: ClassifierSource;
   classifierReason: ClassifierReason;
   responseSource: ResponseSource;
@@ -41,6 +42,10 @@ export function logConversationTurn(event: ConversationTurnLogEvent): void {
 
   if (process.env.LOG_USER_TEXT === "true") {
     payload.userInput = event.userInput;
+  }
+
+  if (process.env.LOG_ASSISTANT_TEXT === "true") {
+    payload.assistantMessage = event.assistantMessage;
   }
 
   console.log(JSON.stringify(payload));
