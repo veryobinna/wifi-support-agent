@@ -90,6 +90,9 @@ describe("/api/chat", () => {
   it("skips the response LLM when the engine transitions into a terminal state", async () => {
     const originalApiKey = process.env.OPENAI_API_KEY;
     const originalNodeEnv = process.env.NODE_ENV;
+    const consoleLogSpy = vi
+      .spyOn(console, "log")
+      .mockImplementation(() => {});
     const createMock = vi.fn().mockResolvedValue({
       output_text: JSON.stringify({
         type: "answer",
@@ -131,6 +134,8 @@ describe("/api/chat", () => {
       );
       expect(createMock).toHaveBeenCalledTimes(1);
     } finally {
+      consoleLogSpy.mockRestore();
+
       if (originalApiKey === undefined) {
         Reflect.deleteProperty(process.env, "OPENAI_API_KEY");
       } else {

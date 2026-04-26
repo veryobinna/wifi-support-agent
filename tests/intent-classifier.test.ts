@@ -78,6 +78,9 @@ describe("intent classifier", () => {
   it("reports the reason when the llm request falls back after an http error", async () => {
     const originalApiKey = process.env.OPENAI_API_KEY;
     const originalNodeEnv = process.env.NODE_ENV;
+    const consoleWarnSpy = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => {});
     const createMock = vi.fn().mockRejectedValue({
       status: 500,
       name: "InternalServerError"
@@ -105,6 +108,8 @@ describe("intent classifier", () => {
         })
       );
     } finally {
+      consoleWarnSpy.mockRestore();
+
       if (originalApiKey === undefined) {
         delete process.env.OPENAI_API_KEY;
       } else {
