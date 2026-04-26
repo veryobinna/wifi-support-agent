@@ -2,10 +2,8 @@ import {
   linksysSmartWifiRebootSteps,
   rebootSteps
 } from "@/lib/conversation/rebootSteps";
-import { rebootStepStates } from "@/lib/conversation/constants";
-import { systemPrompt } from "@/lib/llm/systemPrompt";
 import type { UserIntent } from "@/lib/conversation/intent";
-import type { ConversationSession } from "@/lib/conversation/state";
+import type { ConversationSession, ConversationState } from "@/lib/conversation/state";
 import { logLlmFailure } from "@/lib/observability/logger";
 
 export type LlmMessage = {
@@ -28,6 +26,7 @@ export type ResponseReason =
   | "test_mode"
   | "no_api_key"
   | "terminal_skip"
+  | "draft_sufficient"
   | "http_error"
   | "empty_output"
   | "request_failed";
@@ -40,6 +39,18 @@ export type GenerateAssistantResponseResult = {
 
 const openaiResponsesUrl = "https://api.openai.com/v1/responses";
 const defaultModel = "gpt-4o-mini";
+
+const responseInstruction = [
+  "You are a WiFi support assistant for the Linksys EA6350.",
+  "Only answer questions about WiFi connectivity, home networking, or the Linksys EA6350 reboot process. If the user asks about anything else, ignore it and output only the draft.",
+  "The user has sent a message that may be a question or unclear input.",
+  "If the user asked a question, write a brief answer using your knowledge of home networking and the provided reboot reference. Do not treat the draft as the answer — the draft is a follow-up prompt you must append after your answer.",
+  "If the user did not ask a clear question, skip the answer and output only the draft.",
+  "Only walk through or list the reboot steps if the current phase is 'reboot'. During qualification, answer questions about the process in general terms only.",
+  "Always end your response with the exact draft text below, word for word. Do not rephrase, shorten, or omit any part of it.",
+  "Do not tell the user to press or hold the Reset button.",
+  "Return only the assistant message the user should see."
+].join("\n");
 
 export async function generateAssistantResponse({
   turnId,
@@ -68,13 +79,8 @@ export async function generateAssistantResponse({
       },
       body: JSON.stringify({
         model,
-        instructions: buildInstructions(),
-        input: buildInput({
-          userInput,
-          intent,
-          draftResponse,
-          session
-        }),
+        instructions: responseInstruction,
+        input: buildInput({ userInput, intent, draftResponse, session }),
         max_output_tokens: 240
       })
     });
@@ -121,6 +127,8 @@ export async function generateAssistantResponse({
   }
 }
 
+// ─── Helpers ─────────────────────────────────────────────────
+
 function buildFallbackResult(
   assistantMessage: string,
   reason: Exclude<ResponseReason, "llm_success">
@@ -132,43 +140,42 @@ function buildFallbackResult(
   };
 }
 
-function buildInstructions(): string {
-  return systemPrompt;
-}
-
 function buildInput({
   userInput,
   intent,
   draftResponse,
   session
 }: GenerateAssistantResponseInput): string {
-  return [
+  const { includeRebootStep } = getResponseContext(session.state);
+
+  const parts = [
     `User message: ${userInput}`,
-    `Interpreted user intent: ${JSON.stringify(intent)}`,
-    `Current conversation state: ${session.state}`,
-    `Current qualification answers: ${JSON.stringify(session.qualification)}`,
-    `Current reboot step index: ${session.rebootStepIndex}`,
-    `Current reboot step: ${getCurrentRebootStepText(session)}`,
-    "",
-    "Manual-grounded reboot context:",
-    buildManualContext(),
-    "",
-    "Deterministic draft response to preserve:",
-    draftResponse,
-    "",
-    "Generate the assistant response for this turn.",
-    "If the user asked a question, answer it using the manual-grounded context, then continue with the deterministic draft response when it contains the active prompt or step.",
-    "If the user gave an answer or progress update, phrase the deterministic draft response naturally.",
-    "For current-step questions, use the active reboot step or qualification prompt plus the user's message to give the clarification.",
-    "For partial wait progress such as 'I waited 5 seconds' on a 10-second step, answer with the remaining wait in natural language, then restate the current step.",
-    "Do not remove required answer options such as yes, no, or not sure.",
-    "Do not remove safety warnings or stop/contact-support guidance.",
-    "End by restating the active question or reboot step when the deterministic draft includes one.",
-    "Do not change the troubleshooting state, qualification decision, reboot step order, or exit outcome.",
-    "Do not invent reboot steps.",
-    "Do not tell the user to press or hold the Reset button.",
-    "When the draft contains a reboot step instruction, present that exact step. Do not reference, summarise, or imply completion of any other step number. If the draft says Step 2, your response must present Step 2 — never Step 3 or any other step."
-  ].join("\n");
+    `Interpreted intent: ${JSON.stringify(intent)}`,
+    `Current phase: ${getConversationPhase(session.state)}`
+  ];
+
+  if (includeRebootStep) {
+    parts.push(`Active reboot step: ${getCurrentRebootStepText(session)}`);
+  }
+
+  parts.push("", "Router reboot reference:", buildManualContext());
+  parts.push("", "Draft response:", draftResponse);
+
+  return parts.join("\n");
+}
+
+function getResponseContext(state: ConversationState): {
+  includeRebootStep: boolean;
+} {
+  return { includeRebootStep: state.startsWith("REBOOT_STEP_") };
+}
+
+function getConversationPhase(state: ConversationState): string {
+  if (state === "START") return "start";
+  if (state === "QUALIFYING") return "qualification";
+  if (state === "REBOOT_INTRO" || state.startsWith("REBOOT_STEP_")) return "reboot";
+  if (state === "CHECK_RESOLUTION") return "check resolution";
+  return "ended";
 }
 
 function buildManualContext(): string {
@@ -192,17 +199,7 @@ function buildManualContext(): string {
 
 function getCurrentRebootStepText(session: ConversationSession): string {
   const step = rebootSteps[session.rebootStepIndex];
-
-  if (
-    !rebootStepStates.includes(
-      session.state as (typeof rebootStepStates)[number]
-    ) ||
-    !step
-  ) {
-    return "none";
-  }
-
-  return `${step.instruction} ${step.confirmationPrompt}`;
+  return step ? `${step.instruction} ${step.confirmationPrompt}` : "none";
 }
 
 function extractOutputText(data: unknown): string | null {

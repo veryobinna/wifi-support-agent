@@ -82,19 +82,26 @@ export async function POST(request: Request) {
       session
     });
     const turn = advanceConversation(session, classifiedIntent.intent);
-    const assistantResponse = isTerminalState(turn.session.state)
-      ? {
-          assistantMessage: turn.assistantMessage,
-          source: "fallback" as const,
-          reason: "terminal_skip" as const
-        }
-      : await generateAssistantResponse({
-          turnId,
-          userInput: latestUserMessage.content,
-          intent: classifiedIntent.intent,
-          draftResponse: turn.assistantMessage,
-          session: turn.session
-        });
+    const intentNeedsLlm =
+      classifiedIntent.intent.type === "question" ||
+      classifiedIntent.intent.type === "unknown";
+
+    const assistantResponse =
+      !intentNeedsLlm || isTerminalState(turn.session.state)
+        ? {
+            assistantMessage: turn.assistantMessage,
+            source: "fallback" as const,
+            reason: isTerminalState(turn.session.state)
+              ? ("terminal_skip" as const)
+              : ("draft_sufficient" as const)
+          }
+        : await generateAssistantResponse({
+            turnId,
+            userInput: latestUserMessage.content,
+            intent: classifiedIntent.intent,
+            draftResponse: turn.assistantMessage,
+            session: turn.session
+          });
 
     logConversationTurn({
       turnId,

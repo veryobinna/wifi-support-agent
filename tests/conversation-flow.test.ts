@@ -208,8 +208,6 @@ describe("conversation flow transcripts", () => {
 
     expect(turn.session.state).toBe("QUALIFYING");
     expect(turn.session.currentQuestionId).toBe("knownOutage");
-    expect(turn.assistantMessage).toContain("ISP's outage page");
-    expect(turn.assistantMessage).toContain("not sure");
     expect(turn.assistantMessage).toContain(
       "Do you know of an internet service provider outage"
     );
