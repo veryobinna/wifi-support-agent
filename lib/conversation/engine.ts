@@ -123,11 +123,7 @@ function continueQualification(
 
   if (!answer) {
     if (intent.type === "question") {
-      return askQualificationQuestion(
-        session,
-        question,
-        `${answerQualificationQuestion(question)}\n\n${question.prompt}`
-      );
+      return askQualificationQuestion(session, question, question.prompt);
     }
 
     return askQualificationQuestion(session, question, question.retryPrompt);
@@ -342,29 +338,6 @@ function isRebootStepState(state: ConversationState): boolean {
   return rebootStepStates.some((stepState) => stepState === state);
 }
 
-function answerQualificationQuestion(question: QualificationQuestion): string {
-  if (question.id === "knownOutage") {
-    return "You can check your ISP's outage page, mobile app, support line, or service-status messages. If you do not know, answer \"not sure.\"";
-  }
-
-  if (question.id === "deviceImpact") {
-    return "This tells us whether the problem is likely one device or something shared like the router or internet connection.";
-  }
-
-  if (question.id === "connectivityScope") {
-    return "This helps separate a general connection problem from an issue with only one app or website.";
-  }
-
-  if (question.id === "equipmentStatus") {
-    return "A reboot should wait until the modem and router have power and their cables are firmly connected.";
-  }
-
-  if (question.id === "canAccessEquipment") {
-    return "Only continue if you can safely reach the router and modem power cords.";
-  }
-
-  return "The reboot will briefly disconnect the internet, so I need to confirm whether now is a safe time.";
-}
 
 function isStepCompletion(
   _session: ConversationSession,

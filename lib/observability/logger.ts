@@ -19,6 +19,7 @@ type ResponseReason =
   | "test_mode"
   | "no_api_key"
   | "terminal_skip"
+  | "draft_sufficient"
   | "http_error"
   | "empty_output"
   | "request_failed";
