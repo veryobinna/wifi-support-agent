@@ -1,4 +1,6 @@
-export type RebootMethod = "power_cycle" | "linksys_smart_wifi";
+import { rebootMethod, rebootMethodValues } from "./constants";
+
+export type RebootMethod = (typeof rebootMethodValues)[number];
 
 export type RebootStep = {
   id: string;
@@ -11,27 +13,27 @@ export type RebootStep = {
 export const rebootSteps: RebootStep[] = [
   {
     id: "disconnect-router-and-modem-power",
-    method: "power_cycle",
+    method: rebootMethod.powerCycle,
     instruction:
       "Disconnect the power cord from both the router and the modem.",
     confirmationPrompt: "Reply done when both power cords are disconnected."
   },
   {
     id: "wait-ten-seconds",
-    method: "power_cycle",
+    method: rebootMethod.powerCycle,
     instruction: "Wait 10 seconds.",
     confirmationPrompt: "Reply done after waiting 10 seconds.",
     estimatedWait: "10 seconds"
   },
   {
     id: "reconnect-modem-power",
-    method: "power_cycle",
+    method: rebootMethod.powerCycle,
     instruction: "Reconnect the modem power cord and make sure it has power.",
     confirmationPrompt: "Reply done when the modem power cord is reconnected."
   },
   {
     id: "wait-for-modem-online",
-    method: "power_cycle",
+    method: rebootMethod.powerCycle,
     instruction:
       "Wait until the modem online indicator stops blinking. This usually takes about two minutes.",
     confirmationPrompt:
@@ -40,13 +42,13 @@ export const rebootSteps: RebootStep[] = [
   },
   {
     id: "reconnect-router-power",
-    method: "power_cycle",
+    method: rebootMethod.powerCycle,
     instruction: "Reconnect the router power cord.",
     confirmationPrompt: "Reply done when the router power cord is reconnected."
   },
   {
     id: "wait-for-router-and-test",
-    method: "power_cycle",
+    method: rebootMethod.powerCycle,
     instruction:
       "Wait until the router power indicator stops blinking, then wait two more minutes before trying to connect to the internet.",
     confirmationPrompt:
@@ -58,31 +60,31 @@ export const rebootSteps: RebootStep[] = [
 export const linksysSmartWifiRebootSteps: RebootStep[] = [
   {
     id: "log-in-to-linksys-smart-wifi",
-    method: "linksys_smart_wifi",
+    method: rebootMethod.linksysSmartWifi,
     instruction: "Log in to Linksys Smart Wi-Fi.",
     confirmationPrompt: "Continue after signing in."
   },
   {
     id: "open-troubleshooting",
-    method: "linksys_smart_wifi",
+    method: rebootMethod.linksysSmartWifi,
     instruction: "Under Router Settings, click Troubleshooting.",
     confirmationPrompt: "Continue after opening Troubleshooting."
   },
   {
     id: "open-diagnostics",
-    method: "linksys_smart_wifi",
+    method: rebootMethod.linksysSmartWifi,
     instruction: "Click the Diagnostics tab.",
     confirmationPrompt: "Continue after opening Diagnostics."
   },
   {
     id: "click-reboot",
-    method: "linksys_smart_wifi",
+    method: rebootMethod.linksysSmartWifi,
     instruction: "Under Reboot, click Reboot.",
     confirmationPrompt: "Continue after clicking Reboot."
   },
   {
     id: "confirm-reboot",
-    method: "linksys_smart_wifi",
+    method: rebootMethod.linksysSmartWifi,
     instruction: "Click Yes to confirm the reboot.",
     confirmationPrompt: "Continue after confirming the reboot."
   }

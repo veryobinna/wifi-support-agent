@@ -12,6 +12,7 @@ export default defineConfig({
     }
   },
   test: {
-    environment: "node"
+    environment: "node",
+    exclude: [".claude/**", "node_modules/**"]
   }
 });

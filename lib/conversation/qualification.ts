@@ -1,8 +1,20 @@
-export type DeviceImpact = "single_device" | "multiple_devices";
+import {
+  connectivityScope,
+  connectivityScopeValues,
+  deviceImpact,
+  deviceImpactValues,
+  equipmentStatus,
+  equipmentStatusValues,
+  qualificationQuestionIds,
+  qualificationStatus,
+  qualificationStatusValues
+} from "./constants";
 
-export type ConnectivityScope = "general_connectivity" | "specific_service";
+export type DeviceImpact = (typeof deviceImpactValues)[number];
 
-export type EquipmentStatus = "powered_and_connected" | "power_or_cable_issue";
+export type ConnectivityScope = (typeof connectivityScopeValues)[number];
+
+export type EquipmentStatus = (typeof equipmentStatusValues)[number];
 
 export type QualificationAnswers = {
   deviceImpact?: DeviceImpact;
@@ -13,14 +25,7 @@ export type QualificationAnswers = {
   acceptsTemporaryInterruption?: boolean;
 };
 
-export const qualificationQuestionIds = [
-  "deviceImpact",
-  "connectivityScope",
-  "equipmentStatus",
-  "knownOutage",
-  "canAccessEquipment",
-  "acceptsTemporaryInterruption"
-] as const;
+export { qualificationQuestionIds };
 
 export type QualificationQuestionId = (typeof qualificationQuestionIds)[number];
 
@@ -31,7 +36,7 @@ export type QualificationQuestion = {
   retryPrompt: string;
 };
 
-export type QualificationStatus = "appropriate" | "not_appropriate" | "unknown";
+export type QualificationStatus = (typeof qualificationStatusValues)[number];
 
 export type QualificationDecision = {
   status: QualificationStatus;
@@ -89,71 +94,71 @@ export const qualificationQuestions: QualificationQuestion[] = [
 export function decideRebootAppropriateness(
   answers: QualificationAnswers
 ): QualificationDecision {
-  if (answers.deviceImpact === "single_device") {
+  if (answers.deviceImpact === deviceImpact.singleDevice) {
     return {
-      status: "not_appropriate",
+      status: qualificationStatus.notAppropriate,
       reason:
-        "A router reboot is not the best first step because only one device appears to be affected."
+        "A router reboot is not the right first step when only one device is affected — the problem is most likely with that device, not the router. Try restarting the affected device, forgetting and reconnecting to the WiFi network, or checking its network settings."
     };
   }
 
-  if (answers.connectivityScope === "specific_service") {
+  if (answers.connectivityScope === connectivityScope.specificService) {
     return {
-      status: "not_appropriate",
+      status: qualificationStatus.notAppropriate,
       reason:
-        "A router reboot is not the best first step because the issue appears limited to one app or website."
+        "A router reboot is not the right first step when only one app or website is affected — the problem is with that service, not your connection. Try clearing the app cache, reinstalling it, or checking whether the service is reporting an outage."
     };
   }
 
-  if (answers.equipmentStatus === "power_or_cable_issue") {
+  if (answers.equipmentStatus === equipmentStatus.powerOrCableIssue) {
     return {
-      status: "not_appropriate",
+      status: qualificationStatus.notAppropriate,
       reason:
-        "A router reboot should wait until the modem and router power and network cables are firmly connected."
+        "A router reboot should wait until the equipment is ready. First check that all power and network cables are firmly connected to both the modem and the router, then come back and we can walk through the reboot."
     };
   }
 
   if (answers.knownOutage === true) {
     return {
-      status: "not_appropriate",
+      status: qualificationStatus.notAppropriate,
       reason:
-        "A router reboot is unlikely to help while there is a known internet service provider outage."
+        "A router reboot will not help during an active internet service provider outage. The best next step is to monitor your ISP's status page or support line and wait for the outage to be resolved."
     };
   }
 
   if (answers.canAccessEquipment === false) {
     return {
-      status: "not_appropriate",
+      status: qualificationStatus.notAppropriate,
       reason:
-        "A router reboot is not appropriate if you cannot safely reach the router and modem."
+        "A router reboot requires physical access to the power cords. Come back when you can safely reach the router and modem and we can walk through the steps then."
     };
   }
 
   if (answers.acceptsTemporaryInterruption === false) {
     return {
-      status: "not_appropriate",
+      status: qualificationStatus.notAppropriate,
       reason:
-        "A router reboot is not appropriate right now because it will briefly disconnect the internet."
+        "A router reboot will briefly disconnect the internet, so now is not a good time. Come back when a short interruption is okay and we can walk through it then."
     };
   }
 
   if (
-    answers.deviceImpact === "multiple_devices" &&
-    answers.connectivityScope === "general_connectivity" &&
-    answers.equipmentStatus === "powered_and_connected" &&
+    answers.deviceImpact === deviceImpact.multipleDevices &&
+    answers.connectivityScope === connectivityScope.generalConnectivity &&
+    answers.equipmentStatus === equipmentStatus.poweredAndConnected &&
     answers.knownOutage === false &&
     answers.canAccessEquipment === true &&
     answers.acceptsTemporaryInterruption === true
   ) {
     return {
-      status: "appropriate",
+      status: qualificationStatus.appropriate,
       reason:
         "Multiple devices have a general connectivity issue, the equipment is connected, there is no known outage, and the user can safely reboot now."
     };
   }
 
   return {
-    status: "unknown",
+    status: qualificationStatus.unknown,
     reason: "More information is needed before recommending a router reboot."
   };
 }
@@ -172,268 +177,4 @@ export function getNextQualificationQuestion(
       (question) => answers[question.answerKey] === undefined
     ) ?? null
   );
-}
-
-export function inferIssueOverview(input: string): QualificationAnswers {
-  return {
-    ...inferDeviceImpact(input),
-    ...inferConnectivityScope(input)
-  };
-}
-
-export function inferAnswerForQuestion(
-  questionId: QualificationQuestionId,
-  input: string
-): Partial<QualificationAnswers> | null {
-  switch (questionId) {
-    case "deviceImpact":
-      return inferDeviceImpact(input);
-    case "connectivityScope":
-      return inferConnectivityScope(input);
-    case "equipmentStatus":
-      return inferEquipmentStatus(input);
-    case "knownOutage":
-      return inferKnownOutage(input);
-    case "canAccessEquipment":
-      return inferBooleanAnswer(input, "canAccessEquipment");
-    case "acceptsTemporaryInterruption":
-      return inferBooleanAnswer(input, "acceptsTemporaryInterruption");
-  }
-}
-
-export function parseYesNo(input: string): boolean | null {
-  const normalized = normalizeInput(input);
-
-  if (isUncertain(normalized)) {
-    return null;
-  }
-
-  if (
-    hasAny(normalized, [
-      "no",
-      "nope",
-      "not",
-      "can't",
-      "cannot",
-      "cant",
-      "do not",
-      "don't",
-      "dont",
-      "won't",
-      "wont",
-      "never"
-    ])
-  ) {
-    return false;
-  }
-
-  if (
-    hasAny(normalized, [
-      "yes",
-      "yeah",
-      "yep",
-      "sure",
-      "ok",
-      "okay",
-      "ready",
-      "correct",
-      "true",
-      "i can",
-      "we can",
-      "go ahead"
-    ])
-  ) {
-    return true;
-  }
-
-  return null;
-}
-
-function inferDeviceImpact(input: string): Partial<QualificationAnswers> | null {
-  const normalized = normalizeInput(input);
-
-  if (
-    hasAny(normalized, [
-      "multiple",
-      "several",
-      "many",
-      "all devices",
-      "every device",
-      "everyone",
-      "both devices",
-      "whole house",
-      "all of them"
-    ])
-  ) {
-    return { deviceImpact: "multiple_devices" };
-  }
-
-  if (
-    hasAny(normalized, [
-      "one device",
-      "single device",
-      "only one",
-      "just one",
-      "only my phone",
-      "only my laptop",
-      "just my phone",
-      "just my laptop"
-    ])
-  ) {
-    return { deviceImpact: "single_device" };
-  }
-
-  return null;
-}
-
-function inferConnectivityScope(
-  input: string
-): Partial<QualificationAnswers> | null {
-  const normalized = normalizeInput(input);
-
-  if (
-    hasAny(normalized, [
-      "one app",
-      "one website",
-      "single website",
-      "specific site",
-      "specific website",
-      "specific app",
-      "only netflix",
-      "only youtube",
-      "only email"
-    ])
-  ) {
-    return { connectivityScope: "specific_service" };
-  }
-
-  if (
-    hasAny(normalized, [
-      "no internet",
-      "internet is down",
-      "wifi is down",
-      "wi fi is down",
-      "offline",
-      "nothing loads",
-      "general",
-      "all sites",
-      "all websites",
-      "any website",
-      "no connection",
-      "can't connect",
-      "cant connect"
-    ])
-  ) {
-    return { connectivityScope: "general_connectivity" };
-  }
-
-  return null;
-}
-
-function inferEquipmentStatus(
-  input: string
-): Partial<QualificationAnswers> | null {
-  const normalized = normalizeInput(input);
-
-  if (
-    hasAny(normalized, [
-      "unplugged",
-      "loose",
-      "no power",
-      "powered off",
-      "off",
-      "not connected",
-      "cable is out",
-      "cables are out"
-    ])
-  ) {
-    return { equipmentStatus: "power_or_cable_issue" };
-  }
-
-  const answer = parseYesNo(input);
-
-  if (answer === true) {
-    return { equipmentStatus: "powered_and_connected" };
-  }
-
-  if (answer === false) {
-    return { equipmentStatus: "power_or_cable_issue" };
-  }
-
-  return null;
-}
-
-function inferKnownOutage(
-  input: string
-): Partial<QualificationAnswers> | null {
-  const normalized = normalizeInput(input);
-
-  if (
-    hasAny(normalized, [
-      "no outage",
-      "no known outage",
-      "not aware",
-      "none",
-      "provider says no",
-      "isp says no"
-    ])
-  ) {
-    return { knownOutage: false };
-  }
-
-  const answer = parseYesNo(input);
-
-  if (answer === null) {
-    return null;
-  }
-
-  return { knownOutage: answer };
-}
-
-function inferBooleanAnswer<Key extends keyof QualificationAnswers>(
-  input: string,
-  key: Key
-): Pick<QualificationAnswers, Key> | null {
-  const answer = parseYesNo(input);
-
-  if (answer === null) {
-    return null;
-  }
-
-  return {
-    [key]: answer
-  } as Pick<QualificationAnswers, Key>;
-}
-
-function normalizeInput(input: string): string {
-  return input
-    .toLowerCase()
-    .replaceAll("’", "'")
-    .replace(/[^a-z0-9\s']/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function isUncertain(normalizedInput: string): boolean {
-  return hasAny(normalizedInput, [
-    "i don't know",
-    "i dont know",
-    "not sure",
-    "unsure",
-    "unknown",
-    "maybe"
-  ]);
-}
-
-function hasAny(normalizedInput: string, phrases: string[]): boolean {
-  return phrases.some((phrase) => {
-    const escapedPhrase = escapeRegExp(phrase).replace(/\s+/g, "\\s+");
-    const phrasePattern = new RegExp(`(^|\\s)${escapedPhrase}(?=\\s|$)`);
-
-    return phrasePattern.test(normalizedInput);
-  });
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
