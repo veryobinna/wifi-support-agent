@@ -5,9 +5,11 @@ import { chatRole } from "@/lib/conversation/constants";
 import {
   createInitialConversationSession,
   type ChatResponse,
+  type ChatDebugInfo,
   type ConversationSession
 } from "@/lib/conversation/state";
 import { MessageBubble, TypingIndicator, type Message } from "./MessageBubble";
+import { ReviewerDebugPanel } from "./ReviewerDebugPanel";
 
 const welcomeMessage: Message = {
   id: "welcome",
@@ -43,12 +45,17 @@ function SendIcon() {
   );
 }
 
-export function ChatWindow() {
+type ChatWindowProps = {
+  reviewMode?: boolean;
+};
+
+export function ChatWindow({ reviewMode = false }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([welcomeMessage]);
   const [input, setInput] = useState("");
   const [session, setSession] = useState<ConversationSession>(
     createInitialConversationSession
   );
+  const [debug, setDebug] = useState<ChatDebugInfo | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -89,7 +96,7 @@ export function ChatWindow() {
     }
 
     try {
-      const response = await fetch("/api/chat", {
+      const response = await fetch(`/api/chat${reviewMode ? "?review=1" : ""}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: nextMessages, session })
@@ -107,6 +114,7 @@ export function ChatWindow() {
 
       setMessages((prev) => [...prev, data.message]);
       setSession(data.session);
+      setDebug(data.debug ?? null);
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
@@ -122,59 +130,69 @@ export function ChatWindow() {
   }
 
   return (
-    <div className="chat-card">
-      {/* Header */}
-      <header className="chat-header">
-        <div className="chat-header-icon">
-          <WifiIcon />
-        </div>
-        <div className="chat-header-text">
-          <div className="chat-header-title">WiFi Support Agent</div>
-          <div className="chat-header-subtitle">Linksys EA6350 · Router Reboot Guide</div>
-        </div>
-        <div className="chat-header-badge">Online</div>
-      </header>
+    <div className={`chat-layout${reviewMode ? " with-review-panel" : ""}`}>
+      <div className="chat-card">
+        <header className="chat-header">
+          <div className="chat-header-icon">
+            <WifiIcon />
+          </div>
+          <div className="chat-header-text">
+            <div className="chat-header-title">WiFi Support Agent</div>
+            <div className="chat-header-subtitle">
+              Linksys EA6350 · Router Reboot Guide
+            </div>
+          </div>
+          <div className="chat-header-badge">Online</div>
+        </header>
 
-      {/* Messages */}
-      <div className="message-list" role="log" aria-live="polite" aria-label="Conversation">
-        {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} />
-        ))}
-        {isSending && <TypingIndicator />}
-        <div ref={messagesEndRef} />
+        <div
+          className="message-list"
+          role="log"
+          aria-live="polite"
+          aria-label="Conversation"
+        >
+          {messages.map((message) => (
+            <MessageBubble key={message.id} message={message} />
+          ))}
+          {isSending && <TypingIndicator />}
+          <div ref={messagesEndRef} />
+        </div>
+
+        <div className="chat-input-bar">
+          {error && (
+            <p className="chat-error" role="alert">
+              {error}
+            </p>
+          )}
+          <form className="chat-input-row" onSubmit={handleSubmit}>
+            <textarea
+              ref={textareaRef}
+              className="chat-input"
+              value={input}
+              rows={1}
+              onChange={(e) => {
+                setInput(e.target.value);
+                resizeTextarea();
+              }}
+              onKeyDown={handleKeyDown}
+              placeholder="Describe your WiFi issue…"
+              aria-label="Message"
+            />
+            <button
+              className="send-button"
+              type="submit"
+              disabled={isSending || !input.trim()}
+              aria-label="Send message"
+            >
+              <SendIcon />
+            </button>
+          </form>
+        </div>
       </div>
 
-      {/* Input */}
-      <div className="chat-input-bar">
-        {error && (
-          <p className="chat-error" role="alert">
-            {error}
-          </p>
-        )}
-        <form className="chat-input-row" onSubmit={handleSubmit}>
-          <textarea
-            ref={textareaRef}
-            className="chat-input"
-            value={input}
-            rows={1}
-            onChange={(e) => {
-              setInput(e.target.value);
-              resizeTextarea();
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder="Describe your WiFi issue…"
-            aria-label="Message"
-          />
-          <button
-            className="send-button"
-            type="submit"
-            disabled={isSending || !input.trim()}
-            aria-label="Send message"
-          >
-            <SendIcon />
-          </button>
-        </form>
-      </div>
+      {reviewMode ? (
+        <ReviewerDebugPanel session={session} debug={debug} />
+      ) : null}
     </div>
   );
 }
