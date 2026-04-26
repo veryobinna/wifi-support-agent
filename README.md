@@ -98,6 +98,8 @@ Each API turn emits one structured JSON log line including:
 
 User text is not logged by default. Set `LOG_USER_TEXT=true` in `.env.local` for local debugging.
 
+Assistant text is also omitted by default. Set `LOG_ASSISTANT_TEXT=true` if you need to compare the deterministic draft with the final assistant response during local debugging.
+
 ## Environment Variables
 
 | Variable | Required | Description |
@@ -105,6 +107,7 @@ User text is not logged by default. Set `LOG_USER_TEXT=true` in `.env.local` for
 | `OPENAI_API_KEY` | No | Enables LLM intent classification and response generation |
 | `OPENAI_MODEL` | No | Override the model (default: `gpt-4o-mini`) |
 | `LOG_USER_TEXT` | No | Set to `true` to include raw user input in turn logs |
+| `LOG_ASSISTANT_TEXT` | No | Set to `true` to include the final assistant message in turn logs |
 
 ## Project Structure
 

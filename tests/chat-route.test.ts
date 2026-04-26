@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/chat/route";
 import {
   createInitialConversationSession,
@@ -74,6 +74,66 @@ describe("/api/chat", () => {
     expect(response.status).toBe(200);
     expect(body.session?.qualification.deviceImpact).toBe("multiple_devices");
     expect(body.session?.currentQuestionId).toBe("connectivityScope");
+  });
+
+  it("skips the response LLM when the engine transitions into a terminal state", async () => {
+    const originalApiKey = process.env.OPENAI_API_KEY;
+    const originalNodeEnv = process.env.NODE_ENV;
+    const originalFetch = globalThis.fetch;
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        output_text: JSON.stringify({
+          type: "answer",
+          value: "specific_service",
+          text: "only one app"
+        })
+      })
+    });
+    const session = {
+      ...createInitialConversationSession(),
+      state: "QUALIFYING" as const,
+      currentQuestionId: "connectivityScope" as const
+    };
+
+    Object.assign(process.env, {
+      OPENAI_API_KEY: "test-key",
+      NODE_ENV: "development"
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    try {
+      const response = await POST(
+        createJsonRequest({
+          messages: [{ id: "user-1", role: "user", content: "one app" }],
+          session
+        })
+      );
+
+      const body = (await response.json()) as ChatResponse;
+
+      expect(response.status).toBe(200);
+      expect(body.state).toBe("NOT_APPROPRIATE_EXIT");
+      expect(body.message.content).toContain("not the right first step");
+      expect(body.message.content).not.toContain(
+        "Would you like to start the reboot process?"
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      if (originalApiKey === undefined) {
+        Reflect.deleteProperty(process.env, "OPENAI_API_KEY");
+      } else {
+        Object.assign(process.env, { OPENAI_API_KEY: originalApiKey });
+      }
+
+      if (originalNodeEnv === undefined) {
+        Reflect.deleteProperty(process.env, "NODE_ENV");
+      } else {
+        Object.assign(process.env, { NODE_ENV: originalNodeEnv });
+      }
+
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it("does not call the LLM and returns a session-ended message for NOT_APPROPRIATE_EXIT", async () => {
