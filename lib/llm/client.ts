@@ -2,7 +2,7 @@ import {
   linksysSmartWifiRebootSteps,
   rebootSteps
 } from "@/lib/conversation/rebootSteps";
-import { systemPrompt } from "@/lib/conversation/systemPrompt";
+import { systemPrompt } from "@/lib/llm/systemPrompt";
 import type { UserIntent } from "@/lib/conversation/intent";
 import type { ConversationSession } from "@/lib/conversation/state";
 
@@ -24,6 +24,7 @@ export type ResponseReason =
   | "llm_success"
   | "test_mode"
   | "no_api_key"
+  | "terminal_skip"
   | "http_error"
   | "empty_output"
   | "request_failed";

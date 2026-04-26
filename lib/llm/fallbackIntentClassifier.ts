@@ -15,69 +15,152 @@ export function fallbackClassifyUserIntent({
   session
 }: FallbackClassifyUserIntentInput): UserIntent {
   const normalized = normalizeInput(userInput);
-  const answerValue = getFallbackAnswerValue(normalized, session.state);
 
-  if (answerValue) {
-    return {
-      type: "answer",
-      value: answerValue,
-      text: userInput
-    };
+  if (session.state === "START") {
+    return classifyAtStart(normalized, userInput);
   }
 
-  if (isCompletion(normalized, session.state)) {
-    return {
-      type: "completion",
-      text: userInput
-    };
+  if (session.state === "QUALIFYING") {
+    return classifyAtQualifying(normalized, userInput, session.currentQuestionId);
   }
 
+  if (session.state === "REBOOT_INTRO") {
+    return classifyConfirmation(normalized, userInput);
+  }
+
+  if (isRebootStepState(session.state)) {
+    return classifyAtRebootStep(normalized, userInput, session.state);
+  }
+
+  if (session.state === "CHECK_RESOLUTION") {
+    return classifyConfirmation(normalized, userInput);
+  }
+
+  return { type: "unknown", text: userInput };
+}
+
+// ─── Phase classifiers ────────────────────────────────────────
+
+function classifyAtStart(
+  normalized: string,
+  userInput: string
+): UserIntent {
   if (isGreeting(normalized)) {
-    return {
-      type: "greeting",
-      text: userInput
-    };
+    return { type: "greeting", text: userInput };
+  }
+
+  if (hasIssueContext(normalized)) {
+    return { type: "answer", value: "yes", text: userInput };
   }
 
   if (isQuestion(userInput, normalized)) {
-    return {
-      type: "question",
-      text: userInput
-    };
+    return { type: "question", text: userInput };
   }
 
-  return {
-    type: "unknown",
-    text: userInput
-  };
+  return { type: "unknown", text: userInput };
 }
 
-function getFallbackAnswerValue(
-  normalizedInput: string,
+function classifyAtQualifying(
+  normalized: string,
+  userInput: string,
+  questionId: string | null
+): UserIntent {
+  if (isQuestion(userInput, normalized)) {
+    return { type: "question", text: userInput };
+  }
+
+  const answerValue = getQualifyingAnswerValue(normalized, questionId);
+
+  if (answerValue) {
+    return { type: "answer", value: answerValue, text: userInput };
+  }
+
+  return { type: "unknown", text: userInput };
+}
+
+function classifyAtRebootStep(
+  normalized: string,
+  userInput: string,
   state: ConversationState
+): UserIntent {
+  if (isNegatedCompletion(normalized)) {
+    return { type: "unknown", text: userInput };
+  }
+
+  if (isCompletion(normalized, state)) {
+    return { type: "completion", text: userInput };
+  }
+
+  if (isQuestion(userInput, normalized)) {
+    return { type: "question", text: userInput };
+  }
+
+  return { type: "unknown", text: userInput };
+}
+
+function classifyConfirmation(
+  normalized: string,
+  userInput: string
+): UserIntent {
+  if (isQuestion(userInput, normalized)) {
+    return { type: "question", text: userInput };
+  }
+
+  const confirmation = getConfirmationValue(normalized);
+
+  if (confirmation) {
+    return { type: "answer", value: confirmation, text: userInput };
+  }
+
+  return { type: "unknown", text: userInput };
+}
+
+// ─── Answer value matchers ────────────────────────────────────
+
+function getQualifyingAnswerValue(
+  normalized: string,
+  questionId: string | null
 ): AnswerValue | null {
-  const connectivityScope = getConnectivityScopeValue(normalizedInput);
-  const deviceImpact = getDeviceImpactValue(normalizedInput);
-
-  if (state === "START") {
-    if (connectivityScope) {
-      return connectivityScope;
-    }
-
-    return deviceImpact && hasIssueContext(normalizedInput)
-      ? deviceImpact
-      : null;
+  if (questionId === "deviceImpact") {
+    return getDeviceImpactValue(normalized);
   }
 
-  if (connectivityScope) {
-    return connectivityScope;
+  if (questionId === "connectivityScope") {
+    return getConnectivityScopeValue(normalized);
   }
 
-  if (deviceImpact) {
-    return deviceImpact;
+  return getConfirmationValue(normalized);
+}
+
+function getDeviceImpactValue(normalizedInput: string): AnswerValue | null {
+  if (
+    hasAny(normalizedInput, [
+      "multiple",
+      "several",
+      "some devices",
+      "multiple devices",
+      "several devices",
+      "all devices",
+      "every device",
+      "whole house"
+    ])
+  ) {
+    return "multiple_devices";
   }
 
-  return getConfirmationValue(normalizedInput);
+  if (
+    hasAny(normalizedInput, [
+      "one device",
+      "single device",
+      "only one device",
+      "only my phone",
+      "only my laptop"
+    ])
+  ) {
+    return "single_device";
+  }
+
+  return null;
 }
 
 function getConnectivityScopeValue(
@@ -113,52 +196,6 @@ function getConnectivityScopeValue(
   }
 
   return null;
-}
-
-function getDeviceImpactValue(normalizedInput: string): AnswerValue | null {
-  if (
-    hasAny(normalizedInput, [
-      "multiple",
-      "several",
-      "some devices",
-      "multiple devices",
-      "several devices",
-      "all devices",
-      "every device",
-      "whole house"
-    ])
-  ) {
-    return "multiple_devices";
-  }
-
-  if (
-    hasAny(normalizedInput, [
-      "one device",
-      "single device",
-      "only one device",
-      "only my phone",
-      "only my laptop"
-    ])
-  ) {
-    return "single_device";
-  }
-
-  return null;
-}
-
-function hasIssueContext(normalizedInput: string): boolean {
-  return hasAny(normalizedInput, [
-    "internet",
-    "wifi",
-    "wi fi",
-    "connect",
-    "connection",
-    "offline",
-    "down",
-    "loads",
-    "working",
-    "broken"
-  ]);
 }
 
 function getConfirmationValue(normalizedInput: string): AnswerValue | null {
@@ -209,6 +246,20 @@ function getConfirmationValue(normalizedInput: string): AnswerValue | null {
   return null;
 }
 
+// ─── Completion matchers ──────────────────────────────────────
+
+function isNegatedCompletion(normalizedInput: string): boolean {
+  return hasAny(normalizedInput, [
+    "not done",
+    "not done yet",
+    "haven't done",
+    "havent done",
+    "still waiting",
+    "not finished",
+    "not complete"
+  ]);
+}
+
 function isCompletion(
   normalizedInput: string,
   state: ConversationState
@@ -229,6 +280,28 @@ function isCompletion(
       "unplugged"
     ])
   );
+}
+
+// ─── General matchers ─────────────────────────────────────────
+
+function hasIssueContext(normalizedInput: string): boolean {
+  return hasAny(normalizedInput, [
+    "internet",
+    "wifi",
+    "wi fi",
+    "connect",
+    "connection",
+    "offline",
+    "down",
+    "slow",
+    "loads",
+    "working",
+    "broken",
+    "signal",
+    "network",
+    "router",
+    "modem"
+  ]);
 }
 
 function isGreeting(normalizedInput: string): boolean {
@@ -254,3 +327,6 @@ function isQuestion(rawInput: string, normalizedInput: string): boolean {
   );
 }
 
+function isRebootStepState(state: ConversationState): boolean {
+  return state.startsWith("REBOOT_STEP_");
+}

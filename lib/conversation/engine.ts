@@ -32,6 +32,10 @@ const terminalStates = new Set<ConversationState>([
   conversationState.unresolvedExit
 ]);
 
+export function isTerminalState(state: ConversationState): boolean {
+  return terminalStates.has(state);
+}
+
 export function advanceConversation(
   session: ConversationSession,
   intent: UserIntent
@@ -40,7 +44,9 @@ export function advanceConversation(
     return {
       session,
       assistantMessage:
-        "This support conversation has ended. Start a new chat if you need to troubleshoot another issue."
+        intent.type === "question"
+          ? "This session has ended, so I am not able to answer further questions here. Please start a new chat and I will be happy to help."
+          : "This session has ended. Please start a new chat if you need further help."
     };
   }
 
@@ -87,23 +93,14 @@ function startQualification(
     };
   }
 
-  if (intent.type !== "answer") {
-    return askForIssue(session);
-  }
-
-  const qualification = getInitialQualificationAnswer(intent.value);
-
-  if (!qualification) {
+  if (intent.type !== "answer" || intent.value !== "yes") {
     return askForIssue(session);
   }
 
   const nextSession = {
     ...session,
     state: conversationState.qualifying,
-    qualification: {
-      ...session.qualification,
-      ...qualification
-    }
+    qualification: {}
   };
 
   return routeAfterQualificationUpdate(nextSession);
@@ -156,7 +153,7 @@ function routeAfterQualificationUpdate(
         state: conversationState.notAppropriateExit,
         currentQuestionId: null
       },
-      assistantMessage: `${decision.reason} I recommend stopping here for this reboot flow and trying the more relevant next step first.`,
+      assistantMessage: decision.reason,
       decision
     };
   }
@@ -384,28 +381,6 @@ function getQualificationAnswerForQuestion(
   }
 
   return getMappedQualificationAnswer(question, intent.value);
-}
-
-function getInitialQualificationAnswer(
-  value: AnswerValue
-): Partial<QualificationAnswers> | null {
-  if (value === "single_device") {
-    return { deviceImpact: deviceImpact.singleDevice };
-  }
-
-  if (value === "multiple_devices") {
-    return { deviceImpact: deviceImpact.multipleDevices };
-  }
-
-  if (value === "general_connectivity") {
-    return { connectivityScope: connectivityScope.generalConnectivity };
-  }
-
-  if (value === "specific_service") {
-    return { connectivityScope: connectivityScope.specificService };
-  }
-
-  return null;
 }
 
 function getMappedQualificationAnswer(

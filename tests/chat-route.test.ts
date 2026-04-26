@@ -76,6 +76,66 @@ describe("/api/chat", () => {
     expect(body.session?.currentQuestionId).toBe("connectivityScope");
   });
 
+  it("does not call the LLM and returns a session-ended message for NOT_APPROPRIATE_EXIT", async () => {
+    const session = {
+      ...createInitialConversationSession(),
+      state: "NOT_APPROPRIATE_EXIT" as const
+    };
+
+    const response = await POST(
+      createJsonRequest({
+        messages: [{ id: "user-1", role: "user", content: "what next steps?" }],
+        session
+      })
+    );
+
+    const body = (await response.json()) as ChatResponse;
+
+    expect(response.status).toBe(200);
+    expect(body.state).toBe("NOT_APPROPRIATE_EXIT");
+    expect(body.message.content).toContain("session has ended");
+  });
+
+  it("does not call the LLM and returns a session-ended message for RESOLVED_EXIT", async () => {
+    const session = {
+      ...createInitialConversationSession(),
+      state: "RESOLVED_EXIT" as const
+    };
+
+    const response = await POST(
+      createJsonRequest({
+        messages: [{ id: "user-1", role: "user", content: "thanks" }],
+        session
+      })
+    );
+
+    const body = (await response.json()) as ChatResponse;
+
+    expect(response.status).toBe(200);
+    expect(body.state).toBe("RESOLVED_EXIT");
+    expect(body.message.content).toContain("session has ended");
+  });
+
+  it("does not call the LLM and returns a session-ended message for UNRESOLVED_EXIT", async () => {
+    const session = {
+      ...createInitialConversationSession(),
+      state: "UNRESOLVED_EXIT" as const
+    };
+
+    const response = await POST(
+      createJsonRequest({
+        messages: [{ id: "user-1", role: "user", content: "ok" }],
+        session
+      })
+    );
+
+    const body = (await response.json()) as ChatResponse;
+
+    expect(response.status).toBe(200);
+    expect(body.state).toBe("UNRESOLVED_EXIT");
+    expect(body.message.content).toContain("session has ended");
+  });
+
   it("rejects requests without a latest user message", async () => {
     const response = await POST(
       createJsonRequest({

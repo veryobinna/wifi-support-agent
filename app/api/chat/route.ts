@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { chatRole } from "@/lib/conversation/constants";
-import { advanceConversation } from "@/lib/conversation/engine";
+import {
+  advanceConversation,
+  isTerminalState
+} from "@/lib/conversation/engine";
 import { generateAssistantResponse } from "@/lib/llm/client";
 import { classifyUserIntent } from "@/lib/llm/intentClassifier";
 import { logConversationTurn } from "@/lib/observability/logger";
@@ -30,6 +33,35 @@ export async function POST(request: Request) {
   const previousState = session.state;
   const previousQuestionId = session.currentQuestionId;
   const turnId = crypto.randomUUID();
+
+  if (isTerminalState(session.state)) {
+    const turn = advanceConversation(session, { type: "unknown" });
+
+    logConversationTurn({
+      turnId,
+      userInput: latestUserMessage.content,
+      intent: { type: "unknown" },
+      previousState,
+      nextState: turn.session.state,
+      previousQuestionId,
+      nextQuestionId: turn.session.currentQuestionId,
+      draftResponse: turn.assistantMessage,
+      classifierSource: "fallback",
+      classifierReason: "terminal_skip",
+      responseSource: "fallback",
+      responseReason: "terminal_skip"
+    });
+
+    return NextResponse.json({
+      message: {
+        id: crypto.randomUUID(),
+        role: chatRole.assistant,
+        content: turn.assistantMessage
+      },
+      state: turn.session.state,
+      session: turn.session
+    } satisfies ChatResponse);
+  }
 
   const classifiedIntent = await classifyUserIntent({
     userInput: latestUserMessage.content,

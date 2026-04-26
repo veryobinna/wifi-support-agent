@@ -51,7 +51,7 @@ describe("conversation engine", () => {
   it("asks a qualifying question after the user describes the issue", () => {
     const turn = advanceConversation(createInitialConversationSession(), {
       type: "answer",
-      value: "general_connectivity"
+      value: "yes"
     });
 
     expect(turn.session.state).toBe("QUALIFYING");
@@ -64,11 +64,15 @@ describe("conversation engine", () => {
 
     session = advanceConversation(session, {
       type: "answer",
-      value: "general_connectivity"
+      value: "yes"
     }).session;
     session = advanceConversation(session, {
       type: "answer",
       value: "multiple_devices"
+    }).session;
+    session = advanceConversation(session, {
+      type: "answer",
+      value: "general_connectivity"
     }).session;
     session = advanceConversation(session, {
       type: "answer",
