@@ -13,6 +13,7 @@ import { getClassifierConfig } from "./classifierPlaybook";
 import { fallbackClassifyUserIntent } from "./fallbackIntentClassifier";
 import { buildSchema, parseIntent } from "./intentSchema";
 import { logLlmFailure } from "@/lib/observability/logger";
+import { getOpenAIClient } from "./openaiClient";
 
 export type ClassifyUserIntentInput = {
   turnId?: string;
@@ -39,7 +40,6 @@ export type ClassifyUserIntentResult = {
   reason: ClassifierReason;
 };
 
-const openaiResponsesUrl = "https://api.openai.com/v1/responses";
 const defaultModel = "gpt-4o-mini";
 
 export async function classifyUserIntent({
@@ -48,14 +48,15 @@ export async function classifyUserIntent({
   session
 }: ClassifyUserIntentInput): Promise<ClassifyUserIntentResult> {
   const fallbackIntent = fallbackClassifyUserIntent({ userInput, session });
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
   const model = process.env.OPENAI_MODEL?.trim() || defaultModel;
 
   if (process.env.NODE_ENV === "test") {
     return buildFallbackResult(fallbackIntent, "test_mode");
   }
 
-  if (!apiKey) {
+  const client = getOpenAIClient();
+
+  if (!client) {
     return buildFallbackResult(fallbackIntent, "no_api_key");
   }
 
@@ -65,38 +66,19 @@ export async function classifyUserIntent({
     null;
 
   const config = getClassifierConfig(session.state, questionId);
-
+  const llmRequest = {
+    model,
+    instructions: config.instructions,
+    input: buildClassifierInput(userInput, session),
+    text: {
+      format: buildSchema(config)
+    },
+    max_output_tokens: 120
+  };
   try {
-    const response = await fetch(openaiResponsesUrl, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model,
-        instructions: config.instructions,
-        input: buildClassifierInput(userInput, session),
-        text: {
-          format: buildSchema(config)
-        },
-        max_output_tokens: 120
-      })
-    });
+    const response = await client.responses.create(llmRequest);
 
-    if (!response.ok) {
-      logLlmFailure({
-        event: "llm.classifier_failure",
-        turnId,
-        reason: "http_error",
-        model,
-        httpStatus: response.status,
-        httpStatusText: response.statusText
-      });
-      return buildFallbackResult(fallbackIntent, "http_error");
-    }
-
-    const outputText = extractOutputText((await response.json()) as unknown);
+    const outputText = extractOutputText(response as unknown);
 
     if (!outputText) {
       logLlmFailure({
@@ -126,6 +108,18 @@ export async function classifyUserIntent({
       reason: "llm_success"
     };
   } catch (error) {
+    if (isHttpError(error)) {
+      logLlmFailure({
+        event: "llm.classifier_failure",
+        turnId,
+        reason: "http_error",
+        model,
+        httpStatus: error.status,
+        httpStatusText: error.name
+      });
+      return buildFallbackResult(fallbackIntent, "http_error");
+    }
+
     logLlmFailure({
       event: "llm.classifier_failure",
       turnId,
@@ -210,4 +204,18 @@ function extractOutputText(data: unknown): string | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function isHttpError(
+  error: unknown
+): error is {
+  status: number;
+  name?: string;
+} {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    typeof (error as { status?: unknown }).status === "number"
+  );
 }
