@@ -1,8 +1,4 @@
-import {
-  answerValues,
-  type AnswerValue,
-  type UserIntent
-} from "@/lib/conversation/intent";
+import type { UserIntent } from "@/lib/conversation/intent";
 import { rebootStepStates } from "@/lib/conversation/constants";
 import {
   getNextQualificationQuestion,
@@ -13,8 +9,9 @@ import type {
   ConversationSession,
   ConversationState
 } from "@/lib/conversation/state";
-import { getClassifierConfig, type ClassifierConfig } from "./classifierPlaybook";
+import { getClassifierConfig } from "./classifierPlaybook";
 import { fallbackClassifyUserIntent } from "./fallbackIntentClassifier";
+import { buildSchema, parseIntent } from "./intentSchema";
 
 export type ClassifyUserIntentInput = {
   userInput: string;
@@ -109,30 +106,6 @@ export async function classifyUserIntent({
   }
 }
 
-// ─── Schema builder ───────────────────────────────────────────
-
-function buildSchema(config: ClassifierConfig) {
-  const valueOptions =
-    config.validValues.length > 0
-      ? [{ enum: [...config.validValues] }, { type: "null" }]
-      : [{ type: "null" }];
-
-  return {
-    type: "json_schema",
-    name: "user_intent",
-    schema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        type: { enum: [...config.validTypes] },
-        value: { anyOf: valueOptions },
-        text: { anyOf: [{ type: "string" }, { type: "null" }] }
-      },
-      required: ["type", "value", "text"]
-    }
-  };
-}
-
 // ─── Classifier input ─────────────────────────────────────────
 
 function buildClassifierInput(
@@ -163,85 +136,6 @@ function getCurrentRebootStepText(session: ConversationSession): string {
   }
 
   return `${step.instruction} ${step.confirmationPrompt}`;
-}
-
-// ─── Intent parser ────────────────────────────────────────────
-
-type ParseIntentResult =
-  | { ok: true; intent: UserIntent }
-  | { ok: false; reason: "parse_failed" | "schema_invalid" };
-
-function parseIntent(
-  outputText: string,
-  config: ClassifierConfig
-): ParseIntentResult {
-  try {
-    const normalizedIntent = normalizeIntent(
-      JSON.parse(outputText),
-      config
-    );
-
-    if (!normalizedIntent) {
-      return { ok: false, reason: "schema_invalid" };
-    }
-
-    return { ok: true, intent: normalizedIntent };
-  } catch {
-    return { ok: false, reason: "parse_failed" };
-  }
-}
-
-function normalizeIntent(
-  value: unknown,
-  config: ClassifierConfig
-): UserIntent | null {
-  if (!isRecord(value) || !isIntentType(value.type, config)) {
-    return null;
-  }
-
-  const text = typeof value.text === "string" ? value.text : undefined;
-
-  if (value.type === "question") {
-    return { type: "question", text: text ?? "" };
-  }
-
-  if (value.type === "answer") {
-    if (!isAnswerValue(value.value, config)) {
-      return null;
-    }
-    return { type: "answer", value: value.value, ...(text ? { text } : {}) };
-  }
-
-  if (value.type === "completion") {
-    return { type: "completion", ...(text ? { text } : {}) };
-  }
-
-  if (value.type === "greeting") {
-    return { type: "greeting", ...(text ? { text } : {}) };
-  }
-
-  return { type: "unknown", ...(text ? { text } : {}) };
-}
-
-function isIntentType(
-  value: unknown,
-  config: ClassifierConfig
-): value is UserIntent["type"] {
-  return (
-    typeof value === "string" &&
-    (config.validTypes as string[]).includes(value)
-  );
-}
-
-function isAnswerValue(
-  value: unknown,
-  config: ClassifierConfig
-): value is AnswerValue {
-  return (
-    typeof value === "string" &&
-    answerValues.some((v) => v === value) &&
-    (config.validValues as string[]).includes(value)
-  );
 }
 
 // ─── Helpers ──────────────────────────────────────────────────
