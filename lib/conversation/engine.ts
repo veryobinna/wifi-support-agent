@@ -1,7 +1,12 @@
-import { conversationState } from "./constants";
+import {
+  connectivityScope,
+  conversationState,
+  deviceImpact,
+  equipmentStatus
+} from "./constants";
+import type { AnswerValue, ConfirmationAnswer, UserIntent } from "./intent";
 import { rebootSteps, formatRebootStep } from "./rebootSteps";
 import {
-  createInitialConversationSession,
   rebootStepStates,
   type ConversationSession,
   type ConversationState
@@ -10,13 +15,10 @@ import {
   decideRebootAppropriateness,
   getNextQualificationQuestion,
   getQualificationQuestion,
-  inferAnswerForQuestion,
-  inferIssueOverview,
-  parseYesNo,
+  type QualificationAnswers,
   type QualificationDecision,
   type QualificationQuestion
 } from "./qualification";
-import { hasAny, normalizeInput } from "./text";
 
 export type ConversationTurn = {
   session: ConversationSession;
@@ -31,8 +33,8 @@ const terminalStates = new Set<ConversationState>([
 ]);
 
 export function advanceConversation(
-  session: ConversationSession = createInitialConversationSession(),
-  userInput: string
+  session: ConversationSession,
+  intent: UserIntent
 ): ConversationTurn {
   if (terminalStates.has(session.state)) {
     return {
@@ -43,38 +45,64 @@ export function advanceConversation(
   }
 
   if (session.state === conversationState.start) {
-    return startQualification(session, userInput);
+    return startQualification(session, intent);
   }
 
   if (session.state === conversationState.qualifying) {
-    return continueQualification(session, userInput);
+    return continueQualification(session, intent);
   }
 
   if (session.state === conversationState.rebootIntro) {
-    return startRebootWhenReady(session, userInput);
+    return startRebootWhenReady(session, intent);
   }
 
   if (isRebootStepState(session.state)) {
-    return continueRebootSteps(session, userInput);
+    return continueRebootSteps(session, intent);
   }
 
   if (session.state === conversationState.checkResolution) {
-    return checkResolution(session, userInput);
+    return checkResolution(session, intent);
   }
 
-  return startQualification(session, userInput);
+  return startQualification(session, intent);
 }
 
 function startQualification(
   session: ConversationSession,
-  userInput: string
+  intent: UserIntent
 ): ConversationTurn {
+  if (intent.type === "greeting") {
+    return {
+      session,
+      assistantMessage:
+        "Hi. What WiFi or internet issue are you seeing?"
+    };
+  }
+
+  if (intent.type === "question") {
+    return {
+      session,
+      assistantMessage:
+        "I can answer questions about the reboot flow, but first I need to understand the WiFi or internet issue. What WiFi or internet issue are you seeing?"
+    };
+  }
+
+  if (intent.type !== "answer") {
+    return askForIssue(session);
+  }
+
+  const qualification = getInitialQualificationAnswer(intent.value);
+
+  if (!qualification) {
+    return askForIssue(session);
+  }
+
   const nextSession = {
     ...session,
     state: conversationState.qualifying,
     qualification: {
       ...session.qualification,
-      ...inferIssueOverview(userInput)
+      ...qualification
     }
   };
 
@@ -83,7 +111,7 @@ function startQualification(
 
 function continueQualification(
   session: ConversationSession,
-  userInput: string
+  intent: UserIntent
 ): ConversationTurn {
   const question = session.currentQuestionId
     ? getQualificationQuestion(session.currentQuestionId)
@@ -93,10 +121,10 @@ function continueQualification(
     return routeAfterQualificationUpdate(session);
   }
 
-  const inferredAnswer = inferAnswerForQuestion(question.id, userInput);
+  const answer = getQualificationAnswerForQuestion(question, intent);
 
-  if (!inferredAnswer) {
-    if (classifyUserIntent(userInput) === "question") {
+  if (!answer) {
+    if (intent.type === "question") {
       return askQualificationQuestion(
         session,
         question,
@@ -111,7 +139,7 @@ function continueQualification(
     ...session,
     qualification: {
       ...session.qualification,
-      ...inferredAnswer
+      ...answer
     }
   });
 }
@@ -177,12 +205,11 @@ function askQualificationQuestion(
 
 function startRebootWhenReady(
   session: ConversationSession,
-  userInput: string
+  intent: UserIntent
 ): ConversationTurn {
-  const answer = parseYesNo(userInput);
-  const intent = classifyUserIntent(userInput);
+  const confirmation = getConfirmationAnswer(intent);
 
-  if (answer === false) {
+  if (confirmation === "no") {
     return {
       session: {
         ...session,
@@ -193,7 +220,7 @@ function startRebootWhenReady(
     };
   }
 
-  if (intent === "question") {
+  if (intent.type === "question") {
     return {
       session,
       assistantMessage:
@@ -201,7 +228,7 @@ function startRebootWhenReady(
     };
   }
 
-  if (answer !== true && !isProgressConfirmation(userInput)) {
+  if (confirmation !== "yes" && intent.type !== "completion") {
     return {
       session,
       assistantMessage:
@@ -214,13 +241,20 @@ function startRebootWhenReady(
 
 function continueRebootSteps(
   session: ConversationSession,
-  userInput: string
+  intent: UserIntent
 ): ConversationTurn {
-  if (!isStepCompletion(session, userInput)) {
-    if (classifyUserIntent(userInput) === "question") {
+  if (!isStepCompletion(session, intent)) {
+    if (intent.type === "question") {
       return {
         session,
-        assistantMessage: `${answerRebootStepQuestion(session)}\n\n${formatRebootStep(session.rebootStepIndex)}`
+        assistantMessage: `I can clarify the current reboot step.\n\n${formatRebootStep(session.rebootStepIndex)}`
+      };
+    }
+
+    if (intent.type === "completion" || intent.type === "answer") {
+      return {
+        session,
+        assistantMessage: `This step is not complete yet.\n\n${formatRebootStep(session.rebootStepIndex)}`
       };
     }
 
@@ -265,11 +299,11 @@ function moveToRebootStep(
 
 function checkResolution(
   session: ConversationSession,
-  userInput: string
+  intent: UserIntent
 ): ConversationTurn {
-  const answer = parseYesNo(userInput);
+  const confirmation = getConfirmationAnswer(intent);
 
-  if (answer === true) {
+  if (confirmation === "yes") {
     return {
       session: {
         ...session,
@@ -280,7 +314,7 @@ function checkResolution(
     };
   }
 
-  if (answer === false) {
+  if (confirmation === "no") {
     return {
       session: {
         ...session,
@@ -288,6 +322,14 @@ function checkResolution(
       },
       assistantMessage:
         "I am sorry the reboot did not resolve it. The next best step is to contact your internet service provider or Linksys support, especially if multiple devices are still affected."
+    };
+  }
+
+  if (intent.type === "question") {
+    return {
+      session,
+      assistantMessage:
+        "If the issue is not resolved, I will point you toward your internet service provider or Linksys support. Is the WiFi or internet issue resolved?"
     };
   }
 
@@ -300,82 +342,6 @@ function checkResolution(
 
 function isRebootStepState(state: ConversationState): boolean {
   return rebootStepStates.some((stepState) => stepState === state);
-}
-
-function isProgressConfirmation(input: string): boolean {
-  const intent = classifyUserIntent(input);
-
-  return intent === "completion" || intent === "yes";
-}
-
-type UserIntent = "question" | "completion" | "yes" | "no" | "unsure" | "unknown";
-
-function classifyUserIntent(input: string): UserIntent {
-  const answer = parseYesNo(input);
-
-  if (answer === true) {
-    return "yes";
-  }
-
-  if (answer === false) {
-    return "no";
-  }
-
-  const normalized = normalizeInput(input);
-
-  if (
-    hasAny(normalized, [
-      "not sure",
-      "unsure",
-      "unknown",
-      "i don't know",
-      "i dont know",
-      "maybe"
-    ])
-  ) {
-    return "unsure";
-  }
-
-  if (isQuestionLike(input, normalized)) {
-    return "question";
-  }
-
-  if (
-    hasAny(normalized, [
-      "done",
-      "finished",
-      "complete",
-      "completed",
-      "next",
-      "continue"
-    ])
-  ) {
-    return "completion";
-  }
-
-  return "unknown";
-}
-
-function isQuestionLike(rawInput: string, normalizedInput: string): boolean {
-  return (
-    rawInput.includes("?") ||
-    hasAny(normalizedInput, [
-      "what",
-      "why",
-      "how",
-      "where",
-      "when",
-      "can i",
-      "can we",
-      "should i",
-      "should we",
-      "do i",
-      "do we",
-      "does this",
-      "will this",
-      "is this"
-    ])
-  );
 }
 
 function answerQualificationQuestion(question: QualificationQuestion): string {
@@ -402,142 +368,151 @@ function answerQualificationQuestion(question: QualificationQuestion): string {
   return "The reboot will briefly disconnect the internet, so I need to confirm whether now is a safe time.";
 }
 
-function answerRebootStepQuestion(session: ConversationSession): string {
-  const step = rebootSteps[session.rebootStepIndex];
-
-  if (!step) {
-    return "I can clarify the current reboot step.";
-  }
-
-  if (step.estimatedWait) {
-    return `For this step, wait ${step.estimatedWait}.`;
-  }
-
-  return "Follow the current power-cord reboot step as written. Do not press or hold the Reset button.";
-}
-
 function isStepCompletion(
   session: ConversationSession,
-  userInput: string
+  intent: UserIntent
 ): boolean {
-  if (isProgressConfirmation(userInput)) {
-    return true;
+  if (intent.type !== "completion") {
+    return false;
   }
 
   const step = rebootSteps[session.rebootStepIndex];
-  const normalized = normalizeInput(userInput);
+  const minimumSeconds = step?.requiredWaitSeconds ?? null;
+  const waitedSeconds = intent.waitedSeconds;
 
-  if (!step) {
-    return false;
-  }
-
-  if (step.id === "disconnect-router-and-modem-power") {
-    return hasAny(normalized, [
-      "disconnected",
-      "unplugged",
-      "both power cords",
-      "power cords are disconnected",
-      "power is disconnected"
-    ]);
-  }
-
-  if (step.id === "wait-ten-seconds") {
-    return hasWaitedAtLeast(userInput, 10);
-  }
-
-  if (step.id === "reconnect-modem-power") {
-    return hasAny(normalized, [
-      "reconnected modem",
-      "connected modem",
-      "plugged modem",
-      "modem power cord",
-      "modem has power",
-      "modem is powered"
-    ]);
-  }
-
-  if (step.id === "wait-for-modem-online") {
-    return (
-      hasWaitedAtLeast(userInput, 120) ||
-      hasAny(normalized, [
-        "online indicator stopped",
-        "online light stopped",
-        "stopped blinking",
-        "solid",
-        "modem is online"
-      ])
-    );
-  }
-
-  if (step.id === "reconnect-router-power") {
-    return hasAny(normalized, [
-      "reconnected router",
-      "connected router",
-      "plugged router",
-      "router power cord",
-      "router has power",
-      "router is powered"
-    ]);
-  }
-
-  return (
-    hasWaitedAtLeast(userInput, 120) ||
-    hasAny(normalized, [
-      "router power indicator stopped",
-      "power indicator stopped",
-      "stopped blinking",
-      "waited two more minutes",
-      "tried connecting",
-      "tested internet",
-      "tested the internet"
-    ])
-  );
-}
-
-function hasWaitedAtLeast(input: string, minimumSeconds: number): boolean {
-  const normalized = normalizeInput(input);
-
-  if (
-    !hasAny(normalized, [
-      "waited",
-      "i waited",
-      "have waited",
-      "finished waiting",
-      "done waiting"
-    ])
-  ) {
-    return false;
-  }
-
-  const seconds = extractDurationSeconds(normalized);
-
-  if (seconds === null) {
+  if (minimumSeconds === null || waitedSeconds === undefined) {
     return true;
   }
 
-  return seconds >= minimumSeconds;
+  return waitedSeconds >= minimumSeconds;
 }
 
-function extractDurationSeconds(normalizedInput: string): number | null {
-  const match = normalizedInput.match(
-    /(\d+)\s*(second|seconds|sec|secs|minute|minutes|min|mins)?/
-  );
-
-  if (!match) {
+function getQualificationAnswerForQuestion(
+  question: QualificationQuestion,
+  intent: UserIntent
+): Partial<QualificationAnswers> | null {
+  if (intent.type !== "answer") {
     return null;
   }
 
-  const amount = Number(match[1]);
+  return getMappedQualificationAnswer(question, intent.value);
+}
 
-  if (!Number.isFinite(amount)) {
+function getInitialQualificationAnswer(
+  value: AnswerValue
+): Partial<QualificationAnswers> | null {
+  if (value === "single_device") {
+    return { deviceImpact: deviceImpact.singleDevice };
+  }
+
+  if (value === "multiple_devices") {
+    return { deviceImpact: deviceImpact.multipleDevices };
+  }
+
+  if (value === "general_connectivity") {
+    return { connectivityScope: connectivityScope.generalConnectivity };
+  }
+
+  if (value === "specific_service") {
+    return { connectivityScope: connectivityScope.specificService };
+  }
+
+  return null;
+}
+
+function getMappedQualificationAnswer(
+  question: QualificationQuestion,
+  value: AnswerValue
+): Partial<QualificationAnswers> | null {
+  if (question.id === "deviceImpact") {
+    if (value === "single_device") {
+      return { deviceImpact: deviceImpact.singleDevice };
+    }
+
+    if (value === "multiple_devices") {
+      return { deviceImpact: deviceImpact.multipleDevices };
+    }
+
     return null;
   }
 
-  const unit = match[2];
+  if (question.id === "connectivityScope") {
+    if (value === "general_connectivity") {
+      return { connectivityScope: connectivityScope.generalConnectivity };
+    }
 
-  if (unit && unit.startsWith("min")) {
-    return amount * 60;
+    if (value === "specific_service") {
+      return { connectivityScope: connectivityScope.specificService };
+    }
+
+    return null;
   }
 
-  return amount;
+  const confirmation = asConfirmationAnswer(value);
+
+  if (!confirmation) {
+    return null;
+  }
+
+  if (question.id === "equipmentStatus") {
+    if (confirmation === "yes") {
+      return { equipmentStatus: equipmentStatus.poweredAndConnected };
+    }
+
+    if (confirmation === "no") {
+      return { equipmentStatus: equipmentStatus.powerOrCableIssue };
+    }
+
+    return null;
+  }
+
+  if (question.id === "knownOutage") {
+    return {
+      knownOutage: confirmation === "yes"
+    };
+  }
+
+  if (question.id === "canAccessEquipment") {
+    if (confirmation === "unsure") {
+      return null;
+    }
+
+    return { canAccessEquipment: confirmation === "yes" };
+  }
+
+  if (question.id === "acceptsTemporaryInterruption") {
+    if (confirmation === "unsure") {
+      return null;
+    }
+
+    return {
+      acceptsTemporaryInterruption: confirmation === "yes"
+    };
+  }
+
+  return null;
+}
+
+function getConfirmationAnswer(intent: UserIntent): ConfirmationAnswer | null {
+  if (intent.type !== "answer") {
+    return null;
+  }
+
+  return asConfirmationAnswer(intent.value);
+}
+
+function asConfirmationAnswer(value: AnswerValue): ConfirmationAnswer | null {
+  if (value === "yes" || value === "no" || value === "unsure") {
+    return value;
+  }
+
+  return null;
+}
+
+function askForIssue(session: ConversationSession): ConversationTurn {
+  return {
+    session,
+    assistantMessage:
+      "What WiFi or internet issue are you seeing?"
+  };
 }

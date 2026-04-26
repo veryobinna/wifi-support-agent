@@ -3,6 +3,7 @@ import {
   rebootSteps
 } from "@/lib/conversation/rebootSteps";
 import { systemPrompt } from "@/lib/conversation/systemPrompt";
+import type { UserIntent } from "@/lib/conversation/intent";
 import type { ConversationSession } from "@/lib/conversation/state";
 
 export type LlmMessage = {
@@ -12,6 +13,7 @@ export type LlmMessage = {
 
 export type GenerateAssistantResponseInput = {
   userInput: string;
+  intent: UserIntent;
   draftResponse: string;
   session: ConversationSession;
 };
@@ -21,6 +23,7 @@ const defaultModel = "gpt-4o-mini";
 
 export async function generateAssistantResponse({
   userInput,
+  intent,
   draftResponse,
   session
 }: GenerateAssistantResponseInput): Promise<string> {
@@ -42,6 +45,7 @@ export async function generateAssistantResponse({
         instructions: buildInstructions(),
         input: buildInput({
           userInput,
+          intent,
           draftResponse,
           session
         }),
@@ -66,11 +70,13 @@ function buildInstructions(): string {
 
 function buildInput({
   userInput,
+  intent,
   draftResponse,
   session
 }: GenerateAssistantResponseInput): string {
   return [
     `User message: ${userInput}`,
+    `Interpreted user intent: ${JSON.stringify(intent)}`,
     `Current conversation state: ${session.state}`,
     `Current qualification answers: ${JSON.stringify(session.qualification)}`,
     `Current reboot step index: ${session.rebootStepIndex}`,
@@ -85,6 +91,11 @@ function buildInput({
     "Generate the assistant response for this turn.",
     "If the user asked a question, answer it using the manual-grounded context, then continue with the deterministic draft response when it contains the active prompt or step.",
     "If the user gave an answer or progress update, phrase the deterministic draft response naturally.",
+    "For current-step questions, use the active reboot step or qualification prompt plus the user's message to give the clarification.",
+    "For partial wait progress such as 'I waited 5 seconds' on a 10-second step, answer with the remaining wait in natural language, then restate the current step.",
+    "Do not remove required answer options such as yes, no, or not sure.",
+    "Do not remove safety warnings or stop/contact-support guidance.",
+    "End by restating the active question or reboot step when the deterministic draft includes one.",
     "Do not change the troubleshooting state, qualification decision, reboot step order, or exit outcome.",
     "Do not invent reboot steps.",
     "Do not tell the user to press or hold the Reset button."

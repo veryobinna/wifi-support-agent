@@ -14,6 +14,10 @@ describe("LLM client", () => {
     try {
       const response = await generateAssistantResponse({
         userInput: "Should I press reset?",
+        intent: {
+          type: "question",
+          text: "Should I press reset?"
+        },
         draftResponse: "Do not press the Reset button.",
         session: createInitialConversationSession()
       });

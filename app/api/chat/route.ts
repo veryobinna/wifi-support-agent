@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { chatRole } from "@/lib/conversation/constants";
 import { advanceConversation } from "@/lib/conversation/engine";
 import { generateAssistantResponse } from "@/lib/llm/client";
+import { classifyUserIntent } from "@/lib/llm/intentClassifier";
 import { chatRequestSchema } from "./schema";
 import {
   createInitialConversationSession,
@@ -25,9 +26,14 @@ export async function POST(request: Request) {
   }
 
   const { latestUserMessage, session } = parsedRequest;
-  const turn = advanceConversation(session, latestUserMessage.content);
+  const intent = await classifyUserIntent({
+    userInput: latestUserMessage.content,
+    session
+  });
+  const turn = advanceConversation(session, intent);
   const assistantMessage = await generateAssistantResponse({
     userInput: latestUserMessage.content,
+    intent,
     draftResponse: turn.assistantMessage,
     session: turn.session
   });
