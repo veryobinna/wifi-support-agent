@@ -19,9 +19,22 @@ export type ClassifyUserIntentInput = {
   session: ConversationSession;
 };
 
+export type ClassifierSource = "llm" | "fallback";
+
+export type ClassifierReason =
+  | "llm_success"
+  | "test_mode"
+  | "no_api_key"
+  | "http_error"
+  | "empty_output"
+  | "parse_failed"
+  | "schema_invalid"
+  | "request_failed";
+
 export type ClassifyUserIntentResult = {
   intent: UserIntent;
-  source: "llm" | "fallback";
+  source: ClassifierSource;
+  reason: ClassifierReason;
 };
 
 const openaiResponsesUrl = "https://api.openai.com/v1/responses";
@@ -31,14 +44,15 @@ export async function classifyUserIntent({
   userInput,
   session
 }: ClassifyUserIntentInput): Promise<ClassifyUserIntentResult> {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
   const fallbackIntent = fallbackClassifyUserIntent({ userInput, session });
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
 
-  if (!apiKey || process.env.NODE_ENV === "test") {
-    return {
-      intent: fallbackIntent,
-      source: "fallback"
-    };
+  if (process.env.NODE_ENV === "test") {
+    return buildFallbackResult(fallbackIntent, "test_mode");
+  }
+
+  if (!apiKey) {
+    return buildFallbackResult(fallbackIntent, "no_api_key");
   }
 
   try {
@@ -60,39 +74,28 @@ export async function classifyUserIntent({
     });
 
     if (!response.ok) {
-      return {
-        intent: fallbackIntent,
-        source: "fallback"
-      };
+      return buildFallbackResult(fallbackIntent, "http_error");
     }
 
     const outputText = extractOutputText((await response.json()) as unknown);
 
     if (!outputText) {
-      return {
-        intent: fallbackIntent,
-        source: "fallback"
-      };
+      return buildFallbackResult(fallbackIntent, "empty_output");
     }
 
     const parsedIntent = parseIntent(outputText);
 
-    if (!parsedIntent) {
-      return {
-        intent: fallbackIntent,
-        source: "fallback"
-      };
+    if (!parsedIntent.ok) {
+      return buildFallbackResult(fallbackIntent, parsedIntent.reason);
     }
 
     return {
-      intent: parsedIntent,
-      source: "llm"
+      intent: parsedIntent.intent,
+      source: "llm",
+      reason: "llm_success"
     };
   } catch {
-    return {
-      intent: fallbackIntent,
-      source: "fallback"
-    };
+    return buildFallbackResult(fallbackIntent, "request_failed");
   }
 }
 
@@ -165,12 +168,48 @@ function getCurrentRebootStepText(session: ConversationSession): string {
   return `${step.instruction} ${step.confirmationPrompt}`;
 }
 
-function parseIntent(outputText: string): UserIntent | null {
+type ParseIntentResult =
+  | {
+      ok: true;
+      intent: UserIntent;
+    }
+  | {
+      ok: false;
+      reason: "parse_failed" | "schema_invalid";
+    };
+
+function parseIntent(outputText: string): ParseIntentResult {
   try {
-    return normalizeIntent(JSON.parse(outputText));
+    const normalizedIntent = normalizeIntent(JSON.parse(outputText));
+
+    if (!normalizedIntent) {
+      return {
+        ok: false,
+        reason: "schema_invalid"
+      };
+    }
+
+    return {
+      ok: true,
+      intent: normalizedIntent
+    };
   } catch {
-    return null;
+    return {
+      ok: false,
+      reason: "parse_failed"
+    };
   }
+}
+
+function buildFallbackResult(
+  intent: UserIntent,
+  reason: Exclude<ClassifierReason, "llm_success">
+): ClassifyUserIntentResult {
+  return {
+    intent,
+    source: "fallback",
+    reason
+  };
 }
 
 function normalizeIntent(value: unknown): UserIntent | null {

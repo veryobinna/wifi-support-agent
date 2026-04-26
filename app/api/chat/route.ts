@@ -53,7 +53,9 @@ export async function POST(request: Request) {
     nextQuestionId: turn.session.currentQuestionId,
     draftResponse: turn.assistantMessage,
     classifierSource: classifiedIntent.source,
-    responseSource: assistantResponse.source
+    classifierReason: classifiedIntent.reason,
+    responseSource: assistantResponse.source,
+    responseReason: assistantResponse.reason
   });
 
   const response: ChatResponse = {

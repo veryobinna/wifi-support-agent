@@ -40,7 +40,11 @@ If no API key is configured, a small fallback classifier handles local/demo inte
 
 ## Observability
 
-The API emits one structured JSON log per chat turn to help debug intent-classification and state-transition issues. Each event includes the classified intent, previous and next state, previous and next question id, deterministic draft response, and whether the classifier and response layer used the LLM path or fallback path.
+The API emits one structured JSON log per chat turn to help debug intent-classification and state-transition issues. Each event includes the classified intent, previous and next state, previous and next question id, deterministic draft response, whether the classifier and response layer used the LLM path or fallback path, and why a fallback path was used when it was.
+
+This makes it straightforward to answer questions such as:
+- did the classifier skip the LLM because there was no API key, because the app is running in test mode, or because the LLM response failed validation?
+- did the response layer fall back because the request failed or because the model returned no usable output?
 
 User text is not logged by default. Set `LOG_USER_TEXT=true` in `.env.local` if you need raw user input in the logs while debugging locally.
 

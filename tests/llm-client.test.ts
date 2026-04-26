@@ -24,7 +24,8 @@ describe("LLM client", () => {
 
       expect(response).toEqual({
         assistantMessage: "Do not press the Reset button.",
-        source: "fallback"
+        source: "fallback",
+        reason: "test_mode"
       });
       expect(fetchMock).not.toHaveBeenCalled();
     } finally {
