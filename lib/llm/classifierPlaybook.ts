@@ -1,3 +1,10 @@
+import {
+  confirmationAnswer,
+  conversationState,
+  connectivityScope,
+  deviceImpact,
+  rebootStepStates
+} from "@/lib/conversation/constants";
 import type { QualificationQuestionId } from "@/lib/conversation/qualification";
 import type { ConversationState } from "@/lib/conversation/state";
 import type { AnswerValue, UserIntent } from "@/lib/conversation/intent";
@@ -24,7 +31,7 @@ const startConfig: ClassifierConfig = {
     "Do not attempt to classify the scope or device impact — that happens in a later phase."
   ].join("\n"),
   validTypes: ["answer", "greeting", "question", "unknown"],
-  validValues: ["yes", "no"]
+  validValues: [confirmationAnswer.yes, confirmationAnswer.no]
 };
 
 const deviceImpactConfig: ClassifierConfig = {
@@ -37,7 +44,7 @@ const deviceImpactConfig: ClassifierConfig = {
     "Return type 'unknown' if the answer is unclear or does not address device count."
   ].join("\n"),
   validTypes: ["answer", "question", "unknown"],
-  validValues: ["single_device", "multiple_devices"]
+  validValues: [deviceImpact.singleDevice, deviceImpact.multipleDevices]
 };
 
 const connectivityScopeConfig: ClassifierConfig = {
@@ -52,7 +59,10 @@ const connectivityScopeConfig: ClassifierConfig = {
     "Return type 'unknown' if the answer is unclear."
   ].join("\n"),
   validTypes: ["answer", "question", "unknown"],
-  validValues: ["general_connectivity", "specific_service"]
+  validValues: [
+    connectivityScope.generalConnectivity,
+    connectivityScope.specificService
+  ]
 };
 
 const yesNoConfig: ClassifierConfig = {
@@ -67,7 +77,11 @@ const yesNoConfig: ClassifierConfig = {
     "Important: 'not done', 'not yet', 'haven't done it', 'still waiting' → type 'unknown', never 'answer'."
   ].join("\n"),
   validTypes: ["answer", "question", "unknown"],
-  validValues: ["yes", "no", "unsure"]
+  validValues: [
+    confirmationAnswer.yes,
+    confirmationAnswer.no,
+    confirmationAnswer.unsure
+  ]
 };
 
 const rebootIntroConfig: ClassifierConfig = {
@@ -80,7 +94,7 @@ const rebootIntroConfig: ClassifierConfig = {
     "Return type 'unknown' for unclear responses."
   ].join("\n"),
   validTypes: ["answer", "question", "unknown"],
-  validValues: ["yes", "no"]
+  validValues: [confirmationAnswer.yes, confirmationAnswer.no]
 };
 
 const rebootStepConfig: ClassifierConfig = {
@@ -106,7 +120,7 @@ const checkResolutionConfig: ClassifierConfig = {
     "Return type 'unknown' for unclear responses."
   ].join("\n"),
   validTypes: ["answer", "question", "unknown"],
-  validValues: ["yes", "no"]
+  validValues: [confirmationAnswer.yes, confirmationAnswer.no]
 };
 
 const terminalConfig: ClassifierConfig = {
@@ -130,9 +144,9 @@ export function getClassifierConfig(
   state: ConversationState,
   questionId: QualificationQuestionId | null
 ): ClassifierConfig {
-  if (state === "START") return startConfig;
+  if (state === conversationState.start) return startConfig;
 
-  if (state === "QUALIFYING") {
+  if (state === conversationState.qualifying) {
     if (questionId === "deviceImpact") return deviceImpactConfig;
     if (questionId === "connectivityScope") return connectivityScopeConfig;
     if (questionId !== null && yesNoQuestionIds.includes(questionId)) {
@@ -141,9 +155,13 @@ export function getClassifierConfig(
     return yesNoConfig;
   }
 
-  if (state === "REBOOT_INTRO") return rebootIntroConfig;
-  if (state.startsWith("REBOOT_STEP_")) return rebootStepConfig;
-  if (state === "CHECK_RESOLUTION") return checkResolutionConfig;
+  if (state === conversationState.rebootIntro) return rebootIntroConfig;
+  if (rebootStepStates.includes(state as (typeof rebootStepStates)[number])) {
+    return rebootStepConfig;
+  }
+  if (state === conversationState.checkResolution) {
+    return checkResolutionConfig;
+  }
 
   return terminalConfig;
 }
