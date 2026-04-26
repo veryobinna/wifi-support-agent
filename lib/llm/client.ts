@@ -3,8 +3,12 @@ import {
   rebootSteps
 } from "@/lib/conversation/rebootSteps";
 import type { UserIntent } from "@/lib/conversation/intent";
-import type { ConversationSession, ConversationState } from "@/lib/conversation/state";
+import type {
+  ConversationSession,
+  ConversationState
+} from "@/lib/conversation/state";
 import { logLlmFailure } from "@/lib/observability/logger";
+import { getOpenAIClient } from "./openaiClient";
 
 export type LlmMessage = {
   role: "system" | "user" | "assistant";
@@ -37,7 +41,6 @@ export type GenerateAssistantResponseResult = {
   reason: ResponseReason;
 };
 
-const openaiResponsesUrl = "https://api.openai.com/v1/responses";
 const defaultModel = "gpt-4o-mini";
 
 const responseInstruction = [
@@ -59,46 +62,33 @@ export async function generateAssistantResponse({
   draftResponse,
   session
 }: GenerateAssistantResponseInput): Promise<GenerateAssistantResponseResult> {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
   const model = process.env.OPENAI_MODEL?.trim() || defaultModel;
 
   if (process.env.NODE_ENV === "test") {
     return buildFallbackResult(draftResponse, "test_mode");
   }
 
-  if (!apiKey) {
+  const client = getOpenAIClient();
+
+  if (!client) {
     return buildFallbackResult(draftResponse, "no_api_key");
   }
 
+  const llmRequest = {
+    model,
+    instructions: responseInstruction,
+    input: buildInput({
+      userInput,
+      intent,
+      draftResponse,
+      session
+    }),
+    max_output_tokens: 240
+  };
   try {
-    const response = await fetch(openaiResponsesUrl, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model,
-        instructions: responseInstruction,
-        input: buildInput({ userInput, intent, draftResponse, session }),
-        max_output_tokens: 240
-      })
-    });
+    const response = await client.responses.create(llmRequest);
 
-    if (!response.ok) {
-      logLlmFailure({
-        event: "llm.response_failure",
-        turnId,
-        reason: "http_error",
-        model,
-        httpStatus: response.status,
-        httpStatusText: response.statusText
-      });
-      return buildFallbackResult(draftResponse, "http_error");
-    }
-
-    const data = (await response.json()) as unknown;
-    const assistantMessage = extractOutputText(data);
+    const assistantMessage = extractOutputText(response as unknown);
 
     if (!assistantMessage) {
       logLlmFailure({
@@ -116,6 +106,18 @@ export async function generateAssistantResponse({
       reason: "llm_success"
     };
   } catch (error) {
+    if (isHttpError(error)) {
+      logLlmFailure({
+        event: "llm.response_failure",
+        turnId,
+        reason: "http_error",
+        model,
+        httpStatus: error.status,
+        httpStatusText: error.name
+      });
+      return buildFallbackResult(draftResponse, "http_error");
+    }
+
     logLlmFailure({
       event: "llm.response_failure",
       turnId,
@@ -133,11 +135,7 @@ function buildFallbackResult(
   assistantMessage: string,
   reason: Exclude<ResponseReason, "llm_success">
 ): GenerateAssistantResponseResult {
-  return {
-    assistantMessage,
-    source: "fallback",
-    reason
-  };
+  return { assistantMessage, source: "fallback", reason };
 }
 
 function buildInput({
@@ -244,4 +242,18 @@ function extractOutputText(data: unknown): string | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function isHttpError(
+  error: unknown
+): error is {
+  status: number;
+  name?: string;
+} {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    typeof (error as { status?: unknown }).status === "number"
+  );
 }

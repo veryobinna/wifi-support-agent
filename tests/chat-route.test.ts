@@ -1,12 +1,23 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/chat/route";
 import {
   createInitialConversationSession,
   type ChatRequest,
   type ChatResponse
 } from "@/lib/conversation/state";
+import { getOpenAIClient } from "@/lib/llm/openaiClient";
+
+vi.mock("@/lib/llm/openaiClient", () => ({
+  getOpenAIClient: vi.fn()
+}));
 
 describe("/api/chat", () => {
+  const getOpenAIClientMock = vi.mocked(getOpenAIClient);
+
+  beforeEach(() => {
+    getOpenAIClientMock.mockReset();
+  });
+
   it("advances the conversation with a valid user message", async () => {
     const response = await POST(
       createJsonRequest({
@@ -79,15 +90,11 @@ describe("/api/chat", () => {
   it("skips the response LLM when the engine transitions into a terminal state", async () => {
     const originalApiKey = process.env.OPENAI_API_KEY;
     const originalNodeEnv = process.env.NODE_ENV;
-    const originalFetch = globalThis.fetch;
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        output_text: JSON.stringify({
-          type: "answer",
-          value: "specific_service",
-          text: "only one app"
-        })
+    const createMock = vi.fn().mockResolvedValue({
+      output_text: JSON.stringify({
+        type: "answer",
+        value: "specific_service",
+        text: "only one app"
       })
     });
     const session = {
@@ -100,7 +107,11 @@ describe("/api/chat", () => {
       OPENAI_API_KEY: "test-key",
       NODE_ENV: "development"
     });
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    getOpenAIClientMock.mockReturnValue({
+      responses: {
+        create: createMock
+      }
+    } as never);
 
     try {
       const response = await POST(
@@ -118,7 +129,7 @@ describe("/api/chat", () => {
       expect(body.message.content).not.toContain(
         "Would you like to start the reboot process?"
       );
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(createMock).toHaveBeenCalledTimes(1);
     } finally {
       if (originalApiKey === undefined) {
         Reflect.deleteProperty(process.env, "OPENAI_API_KEY");
@@ -131,8 +142,6 @@ describe("/api/chat", () => {
       } else {
         Object.assign(process.env, { NODE_ENV: originalNodeEnv });
       }
-
-      globalThis.fetch = originalFetch;
     }
   });
 
