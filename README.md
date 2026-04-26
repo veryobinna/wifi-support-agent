@@ -132,3 +132,5 @@ npm run build
 ```
 
 All tests run without network access and do not require an API key.
+
+The test suite includes a deterministic golden transcript harness for end-to-end workflow regression coverage. Those fixtures check named support transcripts against expected state progression and terminal outcomes without calling the LLM.
