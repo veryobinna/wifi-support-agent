@@ -23,7 +23,7 @@ describe("fallback intent classifier", () => {
 
     expect(intent).toMatchObject({
       type: "answer",
-      value: "general_connectivity"
+      value: "yes"
     });
   });
 

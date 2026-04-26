@@ -12,6 +12,7 @@ import type {
   ConversationSession,
   ConversationState
 } from "@/lib/conversation/state";
+import { getClassifierConfig, type ClassifierConfig } from "./classifierPlaybook";
 import { fallbackClassifyUserIntent } from "./fallbackIntentClassifier";
 
 export type ClassifyUserIntentInput = {
@@ -25,6 +26,7 @@ export type ClassifierReason =
   | "llm_success"
   | "test_mode"
   | "no_api_key"
+  | "terminal_skip"
   | "http_error"
   | "empty_output"
   | "parse_failed"
@@ -55,6 +57,13 @@ export async function classifyUserIntent({
     return buildFallbackResult(fallbackIntent, "no_api_key");
   }
 
+  const questionId =
+    session.currentQuestionId ??
+    getNextQualificationQuestion(session.qualification)?.id ??
+    null;
+
+  const config = getClassifierConfig(session.state, questionId);
+
   try {
     const response = await fetch(openaiResponsesUrl, {
       method: "POST",
@@ -64,12 +73,12 @@ export async function classifyUserIntent({
       },
       body: JSON.stringify({
         model: process.env.OPENAI_MODEL?.trim() || defaultModel,
-        instructions: buildClassifierInstructions(),
+        instructions: config.instructions,
         input: buildClassifierInput(userInput, session),
         text: {
-          format: intentResponseFormat
+          format: buildSchema(config)
         },
-        max_output_tokens: 160
+        max_output_tokens: 120
       })
     });
 
@@ -83,7 +92,7 @@ export async function classifyUserIntent({
       return buildFallbackResult(fallbackIntent, "empty_output");
     }
 
-    const parsedIntent = parseIntent(outputText);
+    const parsedIntent = parseIntent(outputText, config);
 
     if (!parsedIntent.ok) {
       return buildFallbackResult(fallbackIntent, parsedIntent.reason);
@@ -99,41 +108,31 @@ export async function classifyUserIntent({
   }
 }
 
-const intentResponseFormat = {
-  type: "json_schema",
-  name: "user_intent",
-  schema: {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      type: {
-        enum: ["question", "answer", "completion", "greeting", "unknown"]
-      },
-      value: {
-        anyOf: [{ enum: [...answerValues] }, { type: "null" }]
-      },
-      text: {
-        anyOf: [{ type: "string" }, { type: "null" }]
-      },
-    },
-    required: ["type", "value", "text"]
-  }
-};
+// ─── Schema builder ───────────────────────────────────────────
 
-function buildClassifierInstructions(): string {
-  return [
-    "Classify one user message for a deterministic WiFi support workflow.",
-    "Return only JSON matching the provided schema.",
-    "Never choose the next state, decide reboot appropriateness, or write qualification fields.",
-    "Use type question for clarification requests, greeting for greetings, unknown when unclear.",
-    "Use type answer with value yes, no, unsure, single_device, multiple_devices, general_connectivity, or specific_service.",
-    "Use type completion only when the current state starts with REBOOT_STEP or is REBOOT_INTRO. Never use completion in START, QUALIFYING, or CHECK_RESOLUTION states.",
-    "Never use completion if the message contains negation or indicates the step is not finished, such as 'not done', 'not done yet', 'still waiting', 'haven't done it', or similar. Classify those as unknown instead.",
-    "At START, use greeting for greetings and unknown for non-problem messages. When the user describes any WiFi or internet problem (slow internet, no connection, dropped signal, etc.), use answer with value general_connectivity unless they clearly name a single app or website, in which case use specific_service.",
-    "For connectivity scope, classify 'not just one app', 'every app', 'all websites', 'everything', and 'nothing loads' as general_connectivity.",
-    "Classify 'only one app', 'only one website', 'just Netflix', 'just YouTube', or another single named app/site as specific_service."
-  ].join("\n");
+function buildSchema(config: ClassifierConfig) {
+  const valueOptions =
+    config.validValues.length > 0
+      ? [{ enum: [...config.validValues] }, { type: "null" }]
+      : [{ type: "null" }];
+
+  return {
+    type: "json_schema",
+    name: "user_intent",
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        type: { enum: [...config.validTypes] },
+        value: { anyOf: valueOptions },
+        text: { anyOf: [{ type: "string" }, { type: "null" }] }
+      },
+      required: ["type", "value", "text"]
+    }
+  };
 }
+
+// ─── Classifier input ─────────────────────────────────────────
 
 function buildClassifierInput(
   userInput: string,
@@ -143,7 +142,6 @@ function buildClassifierInput(
     `Current state: ${session.state}`,
     `Current qualification question: ${getCurrentQuestionPrompt(session)}`,
     `Current reboot step: ${getCurrentRebootStepText(session)}`,
-    `Existing qualification answers: ${JSON.stringify(session.qualification)}`,
     `User message: ${userInput}`
   ].join("\n");
 }
@@ -166,52 +164,37 @@ function getCurrentRebootStepText(session: ConversationSession): string {
   return `${step.instruction} ${step.confirmationPrompt}`;
 }
 
-type ParseIntentResult =
-  | {
-      ok: true;
-      intent: UserIntent;
-    }
-  | {
-      ok: false;
-      reason: "parse_failed" | "schema_invalid";
-    };
+// ─── Intent parser ────────────────────────────────────────────
 
-function parseIntent(outputText: string): ParseIntentResult {
+type ParseIntentResult =
+  | { ok: true; intent: UserIntent }
+  | { ok: false; reason: "parse_failed" | "schema_invalid" };
+
+function parseIntent(
+  outputText: string,
+  config: ClassifierConfig
+): ParseIntentResult {
   try {
-    const normalizedIntent = normalizeIntent(JSON.parse(outputText));
+    const normalizedIntent = normalizeIntent(
+      JSON.parse(outputText),
+      config
+    );
 
     if (!normalizedIntent) {
-      return {
-        ok: false,
-        reason: "schema_invalid"
-      };
+      return { ok: false, reason: "schema_invalid" };
     }
 
-    return {
-      ok: true,
-      intent: normalizedIntent
-    };
+    return { ok: true, intent: normalizedIntent };
   } catch {
-    return {
-      ok: false,
-      reason: "parse_failed"
-    };
+    return { ok: false, reason: "parse_failed" };
   }
 }
 
-function buildFallbackResult(
-  intent: UserIntent,
-  reason: Exclude<ClassifierReason, "llm_success">
-): ClassifyUserIntentResult {
-  return {
-    intent,
-    source: "fallback",
-    reason
-  };
-}
-
-function normalizeIntent(value: unknown): UserIntent | null {
-  if (!isRecord(value) || !isIntentType(value.type)) {
+function normalizeIntent(
+  value: unknown,
+  config: ClassifierConfig
+): UserIntent | null {
+  if (!isRecord(value) || !isIntentType(value.type, config)) {
     return null;
   }
 
@@ -222,22 +205,14 @@ function normalizeIntent(value: unknown): UserIntent | null {
   }
 
   if (value.type === "answer") {
-    if (!isAnswerValue(value.value)) {
+    if (!isAnswerValue(value.value, config)) {
       return null;
     }
-
-    return {
-      type: "answer",
-      value: value.value,
-      ...(text ? { text } : {})
-    };
+    return { type: "answer", value: value.value, ...(text ? { text } : {}) };
   }
 
   if (value.type === "completion") {
-    return {
-      type: "completion",
-      ...(text ? { text } : {})
-    };
+    return { type: "completion", ...(text ? { text } : {}) };
   }
 
   if (value.type === "greeting") {
@@ -247,18 +222,34 @@ function normalizeIntent(value: unknown): UserIntent | null {
   return { type: "unknown", ...(text ? { text } : {}) };
 }
 
-function isIntentType(value: unknown): value is UserIntent["type"] {
+function isIntentType(
+  value: unknown,
+  config: ClassifierConfig
+): value is UserIntent["type"] {
   return (
-    value === "question" ||
-    value === "answer" ||
-    value === "completion" ||
-    value === "greeting" ||
-    value === "unknown"
+    typeof value === "string" &&
+    (config.validTypes as string[]).includes(value)
   );
 }
 
-function isAnswerValue(value: unknown): value is AnswerValue {
-  return answerValues.some((answerValue) => answerValue === value);
+function isAnswerValue(
+  value: unknown,
+  config: ClassifierConfig
+): value is AnswerValue {
+  return (
+    typeof value === "string" &&
+    answerValues.some((v) => v === value) &&
+    (config.validValues as string[]).includes(value)
+  );
+}
+
+// ─── Helpers ──────────────────────────────────────────────────
+
+function buildFallbackResult(
+  intent: UserIntent,
+  reason: Exclude<ClassifierReason, "llm_success">
+): ClassifyUserIntentResult {
+  return { intent, source: "fallback", reason };
 }
 
 function isRebootStepState(state: ConversationState): boolean {
@@ -266,36 +257,22 @@ function isRebootStepState(state: ConversationState): boolean {
 }
 
 function extractOutputText(data: unknown): string | null {
-  if (!isRecord(data)) {
-    return null;
-  }
+  if (!isRecord(data)) return null;
 
   const outputText = data.output_text;
-
   if (typeof outputText === "string" && outputText.trim()) {
     return outputText.trim();
   }
 
   const output = data.output;
-
-  if (!Array.isArray(output)) {
-    return null;
-  }
+  if (!Array.isArray(output)) return null;
 
   const textParts: string[] = [];
-
   for (const item of output) {
-    if (!isRecord(item) || !Array.isArray(item.content)) {
-      continue;
-    }
-
+    if (!isRecord(item) || !Array.isArray(item.content)) continue;
     for (const contentItem of item.content) {
-      if (!isRecord(contentItem)) {
-        continue;
-      }
-
+      if (!isRecord(contentItem)) continue;
       const text = contentItem.text;
-
       if (typeof text === "string" && text.trim()) {
         textParts.push(text.trim());
       }

@@ -98,7 +98,7 @@ export function decideRebootAppropriateness(
     return {
       status: qualificationStatus.notAppropriate,
       reason:
-        "A router reboot is not the best first step because only one device appears to be affected."
+        "A router reboot is not the right first step when only one device is affected — the problem is most likely with that device, not the router. Try restarting the affected device, forgetting and reconnecting to the WiFi network, or checking its network settings."
     };
   }
 
@@ -106,7 +106,7 @@ export function decideRebootAppropriateness(
     return {
       status: qualificationStatus.notAppropriate,
       reason:
-        "A router reboot is not the best first step because the issue appears limited to one app or website."
+        "A router reboot is not the right first step when only one app or website is affected — the problem is with that service, not your connection. Try clearing the app cache, reinstalling it, or checking whether the service is reporting an outage."
     };
   }
 
@@ -114,7 +114,7 @@ export function decideRebootAppropriateness(
     return {
       status: qualificationStatus.notAppropriate,
       reason:
-        "A router reboot should wait until the modem and router power and network cables are firmly connected."
+        "A router reboot should wait until the equipment is ready. First check that all power and network cables are firmly connected to both the modem and the router, then come back and we can walk through the reboot."
     };
   }
 
@@ -122,7 +122,7 @@ export function decideRebootAppropriateness(
     return {
       status: qualificationStatus.notAppropriate,
       reason:
-        "A router reboot is unlikely to help while there is a known internet service provider outage."
+        "A router reboot will not help during an active internet service provider outage. The best next step is to monitor your ISP's status page or support line and wait for the outage to be resolved."
     };
   }
 
@@ -130,7 +130,7 @@ export function decideRebootAppropriateness(
     return {
       status: qualificationStatus.notAppropriate,
       reason:
-        "A router reboot is not appropriate if you cannot safely reach the router and modem."
+        "A router reboot requires physical access to the power cords. Come back when you can safely reach the router and modem and we can walk through the steps then."
     };
   }
 
@@ -138,7 +138,7 @@ export function decideRebootAppropriateness(
     return {
       status: qualificationStatus.notAppropriate,
       reason:
-        "A router reboot is not appropriate right now because it will briefly disconnect the internet."
+        "A router reboot will briefly disconnect the internet, so now is not a good time. Come back when a short interruption is okay and we can walk through it then."
     };
   }
 

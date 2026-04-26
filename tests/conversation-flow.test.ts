@@ -17,8 +17,9 @@ import {
 describe("conversation flow transcripts", () => {
   it("guides an appropriate issue through reboot and resolved exit", () => {
     const transcript = runTranscript([
-      answer("general_connectivity"),
+      answer("yes"),
       answer("multiple_devices"),
+      answer("general_connectivity"),
       answer("yes"),
       answer("no"),
       answer("yes"),
@@ -29,6 +30,7 @@ describe("conversation flow transcripts", () => {
     ]);
 
     expect(states(transcript)).toEqual([
+      "QUALIFYING",
       "QUALIFYING",
       "QUALIFYING",
       "QUALIFYING",
@@ -82,7 +84,7 @@ describe("conversation flow transcripts", () => {
 
   it("exits gracefully when the issue only affects one device", () => {
     const transcript = runTranscript([
-      answer("general_connectivity"),
+      answer("yes"),
       answer("single_device")
     ]);
 
@@ -94,22 +96,24 @@ describe("conversation flow transcripts", () => {
 
   it("exits gracefully when there is a known provider outage", () => {
     const transcript = runTranscript([
-      answer("general_connectivity"),
+      answer("yes"),
       answer("multiple_devices"),
+      answer("general_connectivity"),
       answer("yes"),
       answer("yes")
     ]);
 
     expect(lastTurn(transcript).session.state).toBe("NOT_APPROPRIATE_EXIT");
     expect(lastTurn(transcript).assistantMessage).toContain(
-      "known internet service provider outage"
+      "internet service provider outage"
     );
   });
 
   it("exits gracefully when the user cannot safely reach the equipment", () => {
     const transcript = runTranscript([
-      answer("general_connectivity"),
+      answer("yes"),
       answer("multiple_devices"),
+      answer("general_connectivity"),
       answer("yes"),
       answer("no"),
       answer("no")
@@ -121,8 +125,9 @@ describe("conversation flow transcripts", () => {
 
   it("ends helpfully when reboot does not resolve the issue", () => {
     const transcript = runTranscript([
-      answer("general_connectivity"),
+      answer("yes"),
       answer("multiple_devices"),
+      answer("general_connectivity"),
       answer("yes"),
       answer("no"),
       answer("yes"),
@@ -140,7 +145,7 @@ describe("conversation flow transcripts", () => {
 
   it("retries when a qualification answer is unclear", () => {
     const transcript = runTranscript([
-      answer("general_connectivity"),
+      answer("yes"),
       unknown("maybe")
     ]);
 
@@ -278,7 +283,7 @@ describe("conversation flow transcripts", () => {
   it("handles an issue overview intent through normal state flow", () => {
     const turn = advanceConversation(
       createInitialConversationSession(),
-      answer("general_connectivity")
+      answer("yes")
     );
 
     expect(turn.session.state).toBe("QUALIFYING");
@@ -348,7 +353,7 @@ describe("conversation flow transcripts", () => {
     const turn = advanceConversation(session, unknown("I still need help"));
 
     expect(turn.session.state).toBe("RESOLVED_EXIT");
-    expect(turn.assistantMessage).toContain("conversation has ended");
+    expect(turn.assistantMessage).toContain("session has ended");
   });
 });
 
