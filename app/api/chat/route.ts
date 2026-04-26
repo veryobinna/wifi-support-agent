@@ -21,6 +21,8 @@ import {
 
 export async function POST(request: Request) {
   const turnId = crypto.randomUUID();
+  const debugEnabled = isReviewerDebugEnabled(request);
+  const requestStartedAt = performance.now();
   try {
     const parsedRequest = await parseChatRequest(request);
 
@@ -47,7 +49,10 @@ export async function POST(request: Request) {
     const previousQuestionId = session.currentQuestionId;
 
     if (isTerminalState(session.state)) {
+      const engineStartedAt = performance.now();
       const turn = advanceConversation(session, { type: "unknown" });
+      const engineLatencyMs = getLatencyMs(engineStartedAt);
+      const totalLatencyMs = getLatencyMs(requestStartedAt);
 
       logConversationTurn({
         turnId,
@@ -72,20 +77,50 @@ export async function POST(request: Request) {
           content: turn.assistantMessage
         },
         state: turn.session.state,
-        session: turn.session
+        session: turn.session,
+        ...(debugEnabled
+          ? {
+              debug: {
+                turnId,
+                latencyMs: {
+                  total: totalLatencyMs,
+                  classifier: 0,
+                  engine: engineLatencyMs,
+                  response: 0
+                },
+                previousState,
+                nextState: turn.session.state,
+                previousQuestionId,
+                nextQuestionId: turn.session.currentQuestionId,
+                intent: JSON.stringify({ type: "unknown" }),
+                classifierSource: "fallback" as const,
+                classifierReason: "terminal_skip" as const,
+                responseSource: "fallback" as const,
+                responseReason: "terminal_skip" as const,
+                draftResponse: turn.assistantMessage,
+                assistantMessage: turn.assistantMessage
+              }
+            }
+          : {})
       } satisfies ChatResponse);
     }
 
+    const classifierStartedAt = performance.now();
     const classifiedIntent = await classifyUserIntent({
       turnId,
       userInput: latestUserMessage.content,
       session
     });
+    const classifierLatencyMs = getLatencyMs(classifierStartedAt);
+
+    const engineStartedAt = performance.now();
     const turn = advanceConversation(session, classifiedIntent.intent);
+    const engineLatencyMs = getLatencyMs(engineStartedAt);
     const intentNeedsLlm =
       classifiedIntent.intent.type === "question" ||
       classifiedIntent.intent.type === "unknown";
 
+    const responseStartedAt = performance.now();
     const assistantResponse =
       !intentNeedsLlm || isTerminalState(turn.session.state)
         ? {
@@ -102,6 +137,8 @@ export async function POST(request: Request) {
             draftResponse: turn.assistantMessage,
             session: turn.session
           });
+    const responseLatencyMs = getLatencyMs(responseStartedAt);
+    const totalLatencyMs = getLatencyMs(requestStartedAt);
 
     logConversationTurn({
       turnId,
@@ -126,7 +163,31 @@ export async function POST(request: Request) {
         content: assistantResponse.assistantMessage
       },
       state: turn.session.state,
-      session: turn.session
+      session: turn.session,
+      ...(debugEnabled
+        ? {
+            debug: {
+              turnId,
+              latencyMs: {
+                total: totalLatencyMs,
+                classifier: classifierLatencyMs,
+                engine: engineLatencyMs,
+                response: responseLatencyMs
+              },
+              previousState,
+              nextState: turn.session.state,
+              previousQuestionId,
+              nextQuestionId: turn.session.currentQuestionId,
+              intent: JSON.stringify(classifiedIntent.intent),
+              classifierSource: classifiedIntent.source,
+              classifierReason: classifiedIntent.reason,
+              responseSource: assistantResponse.source,
+              responseReason: assistantResponse.reason,
+              draftResponse: turn.assistantMessage,
+              assistantMessage: assistantResponse.assistantMessage
+            }
+          }
+        : {})
     };
 
     return NextResponse.json(response);
@@ -146,6 +207,14 @@ export async function POST(request: Request) {
       }
     );
   }
+}
+
+function isReviewerDebugEnabled(request: Request): boolean {
+  return new URL(request.url).searchParams.get("review") === "1";
+}
+
+function getLatencyMs(startedAt: number): number {
+  return Number((performance.now() - startedAt).toFixed(1));
 }
 
 type ParsedChatRequest =

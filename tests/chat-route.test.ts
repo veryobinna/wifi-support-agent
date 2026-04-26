@@ -87,6 +87,47 @@ describe("/api/chat", () => {
     expect(body.session?.currentQuestionId).toBe("connectivityScope");
   });
 
+  it("includes reviewer debug metadata when review mode is enabled", async () => {
+    const response = await POST(
+      createJsonRequest(
+        {
+          messages: [
+            {
+              id: "user-1",
+              role: "user",
+              content: "My WiFi is down."
+            }
+          ]
+        },
+        "?review=1"
+      )
+    );
+
+    const body = (await response.json()) as ChatResponse;
+
+    expect(response.status).toBe(200);
+    expect(body.debug).toEqual(
+      expect.objectContaining({
+        latencyMs: expect.objectContaining({
+          total: expect.any(Number),
+          classifier: expect.any(Number),
+          engine: expect.any(Number),
+          response: expect.any(Number)
+        }),
+        previousState: "START",
+        nextState: "QUALIFYING",
+        previousQuestionId: null,
+        nextQuestionId: "deviceImpact",
+        classifierSource: expect.any(String),
+        classifierReason: expect.any(String),
+        responseSource: expect.any(String),
+        responseReason: expect.any(String),
+        draftResponse: expect.any(String),
+        assistantMessage: expect.any(String)
+      })
+    );
+  });
+
   it("skips the response LLM when the engine transitions into a terminal state", async () => {
     const originalApiKey = process.env.OPENAI_API_KEY;
     const originalNodeEnv = process.env.NODE_ENV;
@@ -258,12 +299,12 @@ describe("/api/chat", () => {
   });
 });
 
-function createJsonRequest(body: ChatRequest): Request {
-  return createRawJsonRequest(body);
+function createJsonRequest(body: ChatRequest, query = ""): Request {
+  return createRawJsonRequest(body, query);
 }
 
-function createRawJsonRequest(body: unknown): Request {
-  return new Request("http://localhost/api/chat", {
+function createRawJsonRequest(body: unknown, query = ""): Request {
+  return new Request(`http://localhost/api/chat${query}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"

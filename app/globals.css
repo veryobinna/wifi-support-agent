@@ -61,18 +61,32 @@ button:disabled {
 /* ─── App shell ────────────────────────────────────────────── */
 
 .app-shell {
-  height: 100vh;
+  min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
 }
 
+.chat-layout {
+  width: 100%;
+  max-width: 720px;
+}
+
+.chat-layout.with-review-panel {
+  width: 100%;
+  max-width: 1320px;
+  height: min(820px, calc(100vh - 48px));
+  display: grid;
+  grid-template-columns: minmax(0, 720px) minmax(320px, 420px);
+  gap: 20px;
+  align-items: stretch;
+}
+
 /* ─── Chat card ─────────────────────────────────────────────── */
 
 .chat-card {
   width: 100%;
-  max-width: 720px;
   height: min(820px, calc(100vh - 48px));
   display: flex;
   flex-direction: column;
@@ -80,6 +94,134 @@ button:disabled {
   border-radius: 20px;
   box-shadow: var(--shadow-elevated);
   overflow: hidden;
+}
+
+.chat-layout.with-review-panel .chat-card {
+  max-width: none;
+  height: 100%;
+}
+
+.debug-panel {
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  background: var(--surface);
+  border-radius: 20px;
+  box-shadow: var(--shadow-elevated);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.debug-panel-header {
+  flex-shrink: 0;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.debug-panel-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+.debug-panel-subtitle {
+  margin-top: 2px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.debug-panel-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.debug-panel-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.debug-panel-scroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+.debug-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.debug-section-title {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.debug-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.debug-grid-row {
+  display: grid;
+  grid-template-columns: minmax(0, 144px) minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--assistant-bg);
+  align-items: start;
+}
+
+.debug-grid-row dt {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.debug-grid-row dd {
+  font-size: 0.82rem;
+  color: var(--foreground);
+  word-break: break-word;
+}
+
+.debug-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.debug-block-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.debug-block-value {
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--assistant-bg);
+  color: var(--foreground);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.debug-empty {
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--assistant-bg);
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 /* ─── Header ─────────────────────────────────────────────────── */
@@ -370,13 +512,49 @@ button:disabled {
     align-items: stretch;
   }
 
+  .chat-layout,
+  .chat-layout.with-review-panel {
+    max-width: 100%;
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
   .chat-card {
     max-width: 100%;
     height: 100vh;
     border-radius: 0;
   }
 
+  .chat-layout.with-review-panel .chat-card {
+    height: min(70vh, 100vh);
+  }
+
+  .debug-panel {
+    height: min(40vh, 360px);
+    border-radius: 0;
+    box-shadow: none;
+    border-top: 1px solid var(--border);
+  }
+
   .message-bubble {
     max-width: 85%;
+  }
+}
+
+@media (min-width: 601px) and (max-width: 1120px) {
+  .chat-layout.with-review-panel {
+    height: auto;
+    grid-template-columns: 1fr;
+    max-width: 920px;
+  }
+
+  .chat-layout.with-review-panel .chat-card {
+    height: min(760px, calc(100vh - 72px));
+  }
+
+  .debug-panel {
+    height: min(360px, calc(100vh - 120px));
   }
 }

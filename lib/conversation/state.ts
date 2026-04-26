@@ -50,4 +50,43 @@ export type ChatResponse = {
   message: ChatMessage;
   state: ConversationState;
   session?: ConversationSession;
+  debug?: ChatDebugInfo;
+};
+
+export type ChatDebugInfo = {
+  turnId: string;
+  latencyMs: {
+    total: number;
+    classifier: number;
+    engine: number;
+    response: number;
+  };
+  previousState: ConversationState;
+  nextState: ConversationState;
+  previousQuestionId: QualificationQuestionId | null;
+  nextQuestionId: QualificationQuestionId | null;
+  intent: string;
+  classifierSource: "llm" | "fallback";
+  classifierReason:
+    | "llm_success"
+    | "test_mode"
+    | "no_api_key"
+    | "terminal_skip"
+    | "http_error"
+    | "empty_output"
+    | "parse_failed"
+    | "schema_invalid"
+    | "request_failed";
+  responseSource: "llm" | "fallback";
+  responseReason:
+    | "llm_success"
+    | "test_mode"
+    | "no_api_key"
+    | "terminal_skip"
+    | "draft_sufficient"
+    | "http_error"
+    | "empty_output"
+    | "request_failed";
+  draftResponse: string;
+  assistantMessage: string;
 };
