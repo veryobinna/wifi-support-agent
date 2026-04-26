@@ -28,6 +28,27 @@ describe("/api/chat", () => {
     expect(body.message.content).toContain("one device or multiple devices");
   });
 
+  it("does not fabricate a problem from a greeting", async () => {
+    const response = await POST(
+      createJsonRequest({
+        messages: [
+          {
+            id: "user-1",
+            role: "user",
+            content: "hello"
+          }
+        ]
+      })
+    );
+
+    const body = (await response.json()) as ChatResponse;
+
+    expect(response.status).toBe(200);
+    expect(body.state).toBe("START");
+    expect(body.session?.currentQuestionId).toBeNull();
+    expect(body.message.content).toContain("What WiFi or internet issue");
+  });
+
   it("continues from the supplied conversation session", async () => {
     const session = {
       ...createInitialConversationSession(),

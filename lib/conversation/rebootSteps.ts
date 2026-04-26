@@ -8,6 +8,7 @@ export type RebootStep = {
   instruction: string;
   confirmationPrompt: string;
   estimatedWait?: string;
+  requiredWaitSeconds?: number;
 };
 
 export const rebootSteps: RebootStep[] = [
@@ -23,7 +24,8 @@ export const rebootSteps: RebootStep[] = [
     method: rebootMethod.powerCycle,
     instruction: "Wait 10 seconds.",
     confirmationPrompt: "Reply done after waiting 10 seconds.",
-    estimatedWait: "10 seconds"
+    estimatedWait: "10 seconds",
+    requiredWaitSeconds: 10
   },
   {
     id: "reconnect-modem-power",
@@ -38,7 +40,8 @@ export const rebootSteps: RebootStep[] = [
       "Wait until the modem online indicator stops blinking. This usually takes about two minutes.",
     confirmationPrompt:
       "Reply done when the modem online indicator has stopped blinking.",
-    estimatedWait: "about two minutes"
+    estimatedWait: "about two minutes",
+    requiredWaitSeconds: 120
   },
   {
     id: "reconnect-router-power",
@@ -53,7 +56,8 @@ export const rebootSteps: RebootStep[] = [
       "Wait until the router power indicator stops blinking, then wait two more minutes before trying to connect to the internet.",
     confirmationPrompt:
       "Reply done after the router power indicator stops blinking and you have waited two more minutes.",
-    estimatedWait: "about two minutes after the router power indicator stops blinking"
+    estimatedWait: "about two minutes after the router power indicator stops blinking",
+    requiredWaitSeconds: 120
   }
 ];
 
