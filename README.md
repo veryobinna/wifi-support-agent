@@ -10,7 +10,7 @@ The goal is to produce a reliable support bot — one that asks qualifying quest
 - TypeScript
 - React
 - Vitest
-- OpenAI Responses API (optional — app runs fully without it)
+- OpenAI Responses API
 
 ## Getting Started
 
@@ -20,11 +20,12 @@ cp .env.example .env.local
 npm run dev
 ```
 
+`OPENAI_API_KEY` is strongly recommended. Without it, the app falls back to a simple keyword-based classifier and deterministic responses, which are sufficient for basic flows and testing but do not provide the same level of accuracy or conversational understanding.
+
 Open `http://localhost:3000`.
 
 To see debug section: `http://localhost:3000/?review=1`
 
-`OPENAI_API_KEY` is optional. Without it, the app uses a keyword-based fallback classifier and deterministic draft responses, so the full conversation flow and all tests work without network access.
 
 ## Architecture
 
