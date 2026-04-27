@@ -131,7 +131,6 @@ export async function classifyUserIntent({
   }
 }
 
-// ─── Classifier input ─────────────────────────────────────────
 
 function buildClassifierInput(
   userInput: string,
@@ -163,7 +162,6 @@ function getCurrentRebootStepText(session: ConversationSession): string {
   return `${step.instruction} ${step.confirmationPrompt}`;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────
 
 function buildFallbackResult(
   intent: UserIntent,

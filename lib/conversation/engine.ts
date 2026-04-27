@@ -41,7 +41,7 @@ export function advanceConversation(
   session: ConversationSession,
   intent: UserIntent
 ): ConversationTurn {
-  if (terminalStates.has(session.state)) {
+  if (isTerminalState(session.state)) {
     return {
       session,
       assistantMessage:
