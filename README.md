@@ -131,24 +131,23 @@ Append `?review=1` to the app URL to enable a reviewer debug panel. It shows the
 
 ## Limitations and Known Gaps
 
-- **Single router model.** Reboot steps and Smart Wi-Fi instructions are hard-coded for the Linksys EA6350.
+- **Single router model.** Reboot steps are hard-coded for the Linksys EA6350.
 - **English only.** Both the deterministic content and the fallback classifier are English. The LLM will follow the user's language to some extent, but qualification answer matching is keyword-based on English forms.
 - **No conversation history passed to the LLM.** Pronoun-heavy or ordinal-reference follow-ups ("the second one") may feel less natural. The trade-off is intentional, the state machine captures the relevant context.
-- **Classifier latency dominates the request.** Typical p50 is classifier ~500 ms + response ~700 ms; speeding up the response side via streaming has limited perceived impact until the classifier is optimized.
+- **Classifier latency dominates the request.** Making two LLM API calls increases latency; Can improve percieved performance through streaming.
 - **Fallback classifier is keyword-based.** It catches simple "yes / no / done" forms but does not understand semantically equivalent phrasings. The LLM classifier covers the common case; the fallback is a last resort.
-- **The response LLM occasionally rephrases the draft instead of answering an inline "How do I X?" question.** Mitigated with worked Wrong/Right examples in the system prompt; not eliminated. Falls back cleanly to the draft when rephrasing fails.
 
 ## Future Work
 
-Each item below was deferred deliberately. The note explains why the trade-off was right for the current scope.
+These improvements were intentionally deferred to keep the scope focused and the system reliable.
 
-**Multilingual content layer.** Extract all deterministic strings to `lib/i18n/{locale}/`, pass `locale` through the session, instruct the LLM in the user's language, and require human review for safety-critical translations (especially "do not press Reset"). Deferred because translation review is a real cost, and the failure mode of a bad safety-string translation is severe.
+**Multilingual support.** Add locale-based content and LLM instructions, with careful review for safety-critical translations.
 
-**Streaming responses.** Switch the API route to a `ReadableStream` and the client to incremental rendering. Deferred because classifier work runs before any streamable token; the perceived UX win is smaller than typical until the classifier is optimized.
+**Streaming responses.** Stream responses from the API for better perceived latency once classifier latency is optimized.
 
-**Conversation history.** Pass the last 2–4 turns to the LLM. Deferred because the state machine + qualification summary already supplies the context the LLM needs, and free-form history dilutes the draft anchor. Add when a real pronoun or ordinal-reference failure case appears.
+**Conversation history.** Pass a small number of recent turns to improve handling of follow-up questions when needed.
 
-**Source-grounded content module.** Move safety warnings out of the response prompt builder into `lib/manual/` with citations to the EA6350 user guide. Cosmetic improvement; deferred because the current grouping in `lib/conversation/rebootSteps.ts` plus `lib/llm/client.ts` is already cohesive.
+**Source-grounded content.** Move safety and reference content into a dedicated module with clearer structure and citations.
 
 
 ## Environment Variables

@@ -45,8 +45,6 @@ export function fallbackClassifyUserIntent({
   return { type: "unknown", text: userInput };
 }
 
-// ─── Phase classifiers ────────────────────────────────────────
-
 function classifyAtStart(
   normalized: string,
   userInput: string
@@ -120,8 +118,6 @@ function classifyConfirmation(
 
   return { type: "unknown", text: userInput };
 }
-
-// ─── Answer value matchers ────────────────────────────────────
 
 function getQualifyingAnswerValue(
   normalized: string,
@@ -252,8 +248,6 @@ function getConfirmationValue(normalizedInput: string): AnswerValue | null {
   return null;
 }
 
-// ─── Completion matchers ──────────────────────────────────────
-
 function isNegatedCompletion(normalizedInput: string): boolean {
   return hasAny(normalizedInput, [
     "not done",
@@ -287,8 +281,6 @@ function isCompletion(
     ])
   );
 }
-
-// ─── General matchers ─────────────────────────────────────────
 
 function hasIssueContext(normalizedInput: string): boolean {
   return hasAny(normalizedInput, [
