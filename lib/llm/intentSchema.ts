@@ -62,7 +62,7 @@ function normalizeIntent(
   const text = typeof value.text === "string" ? value.text : undefined;
 
   if (value.type === "question") {
-    return { type: "question", text: text ?? "" };
+    return { type: "question", text: text || "" };
   }
 
   if (value.type === "answer") {

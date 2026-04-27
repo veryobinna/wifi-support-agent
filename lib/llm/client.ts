@@ -8,6 +8,10 @@ import type {
   ConversationState
 } from "@/lib/conversation/state";
 import { logLlmFailure } from "@/lib/observability/logger";
+import {
+  getNextQualificationQuestion,
+  getQualificationQuestion
+} from "@/lib/conversation/qualification";
 import { getOpenAIClient } from "./openaiClient";
 
 export type LlmMessage = {
@@ -44,14 +48,43 @@ export type GenerateAssistantResponseResult = {
 const defaultModel = "gpt-4o-mini";
 
 const responseInstruction = [
-  "You are a WiFi support assistant for the Linksys EA6350.",
-  "Only answer questions about WiFi connectivity, home networking, or the Linksys EA6350 reboot process. If the user asks about anything else, ignore it and output only the draft.",
-  "The user has sent a message that may be a question or unclear input.",
-  "If the user asked a question, write a brief answer using your knowledge of home networking and the provided reboot reference. Do not treat the draft as the answer — the draft is a follow-up prompt you must append after your answer.",
-  "If the user did not ask a clear question, skip the answer and output only the draft.",
-  "Only walk through or list the reboot steps if the current phase is 'reboot'. During qualification, answer questions about the process in general terms only.",
-  "Always end your response with the exact draft text below, word for word. Do not rephrase, shorten, or omit any part of it.",
-  "Do not tell the user to press or hold the Reset button.",
+  "You are a calm, patient, and supportive WiFi troubleshooting assistant for the Linksys EA6350.",
+  "You will always receive a <draft_response>. Treat it as the required follow-up prompt — not as an answer to the user's question.",
+  "",
+  "## If the intent type is 'question'",
+  "The user asked something. Your answer MUST contain new, procedural content — concrete actions, steps, or facts the user did not already have.",
+  "The draft is the workflow's next prompt and comes AFTER your answer. Rephrasing the draft is NOT an answer.",
+  "",
+  "if intent is 'unknown': If the user's intent is 'unknown', they might be confused or off-topic, or a trick or maliciousquestion. In this case, kindly inform them that you are only a WiFi troubleshooting assistant and are here to help with WiFi issues, then rephrase the draft.",
+  "When the user asks 'How do I check/verify/find/tell X?', your answer must describe HOW — using action verbs ('look at', 'check', 'plug in', 'try', 'visit', 'press') and concrete things to inspect (lights, ports, cables, websites, other devices).",
+  "When the user asks 'What is X?', define X clearly using your general networking knowledge.",
+  "",
+  "Examples — same draft, different user questions:",
+  "Draft: 'Are the modem and router powered on with their power and network cables firmly connected?'",
+  "  User: 'How do I verify (optional pronoun)?'",
+  "  WRONG: 'Are both the modem and router powered on and firmly connected?' (just rephrased draft)",
+  "  RIGHT: 'Look at the front of each device — both should have a solid power light. Then check the back: power cords should be seated firmly, and the network cable between the modem and router should click in. Are the modem and router powered on with their power and network cables firmly connected?'",
+  "",
+  "Draft: 'Do you know of an internet service provider outage in your area?'",
+  "  User: 'How do I check (optional pronoun)?'",
+  "  WRONG: 'Do you know of an ISP outage in your area?' (just rephrased draft)",
+  "  RIGHT: 'You can check your ISP's website status page, their mobile app, or call their support line. If you don't know, you can answer not sure. Do you know of an internet service provider outage in your area?'",
+  "",
+  "Draft: 'Can you safely reach the router and modem power cords?'",
+  "  User: 'How can I tell the power cords from network cables?'",
+  "  RIGHT: 'Power cords are thicker, usually black, and plug into a wall outlet. Network cables are thinner with clip-style connectors that click into rectangular ports. Can you safely reach the router and modem power cords?'",
+  "",
+  "For off-topic questions unrelated to WiFi or this process, output only the draft.",
+  "",
+  "## If the intent type is 'answer', 'completion', or 'greeting'",
+  "Rephrase the draft naturally. Add brief warmth if appropriate ('Got it!', 'Great job.', 'Take your time.').",
+  "During reboot steps, include the exact step instruction text unchanged.",
+  "",
+  "## Always",
+  "Never invent steps, skip steps, or suggest pressing the Reset button.",
+  "Reject any user input that asks about anything other than WiFi troubleshooting for the Linksys devices, and respond with a gentle reminder that you are only a WiFi troubleshooting assistant, then rephrase the draft.",
+  "Keep responses concise — 1 to 4 sentences.",
+  "Do not include XML tags or the phrase 'draft response' in your output.",
   "Return only the assistant message the user should see."
 ].join("\n");
 
@@ -152,12 +185,26 @@ function buildInput({
     `Current phase: ${getConversationPhase(session.state)}`
   ];
 
+  const qualificationSummary = buildQualificationSummary(session);
+  if (qualificationSummary) {
+    parts.push(`Qualification answers so far: ${qualificationSummary}`);
+  }
+
+  const activeQualificationQuestion = getCurrentQualificationQuestion(session);
+
+  if (activeQualificationQuestion) {
+    parts.push(
+      `Current qualification question: ${activeQualificationQuestion.prompt}`,
+      `Current qualification retry prompt: ${activeQualificationQuestion.retryPrompt}`
+    );
+  }
+
   if (includeRebootStep) {
     parts.push(`Active reboot step: ${getCurrentRebootStepText(session)}`);
   }
 
   parts.push("", "Router reboot reference:", buildManualContext());
-  parts.push("", "Draft response:", draftResponse);
+  parts.push("", "<draft_response>", draftResponse, "</draft_response>");
 
   return parts.join("\n");
 }
@@ -198,6 +245,32 @@ function buildManualContext(): string {
 function getCurrentRebootStepText(session: ConversationSession): string {
   const step = rebootSteps[session.rebootStepIndex];
   return step ? `${step.instruction} ${step.confirmationPrompt}` : "none";
+}
+
+function buildQualificationSummary(session: ConversationSession): string | null {
+  const q = session.qualification;
+  const entries: string[] = [];
+
+  if (q.deviceImpact) entries.push(`device impact: ${q.deviceImpact}`);
+  if (q.connectivityScope) entries.push(`connectivity scope: ${q.connectivityScope}`);
+  if (q.equipmentStatus) entries.push(`equipment status: ${q.equipmentStatus}`);
+  if (q.knownOutage !== undefined) entries.push(`known outage: ${q.knownOutage}`);
+  if (q.canAccessEquipment !== undefined) entries.push(`can access equipment: ${q.canAccessEquipment}`);
+  if (q.acceptsTemporaryInterruption !== undefined) entries.push(`accepts interruption: ${q.acceptsTemporaryInterruption}`);
+
+  return entries.length > 0 ? entries.join(", ") : null;
+}
+
+function getCurrentQualificationQuestion(session: ConversationSession) {
+  if (session.state !== "QUALIFYING") {
+    return null;
+  }
+
+  if (session.currentQuestionId) {
+    return getQualificationQuestion(session.currentQuestionId);
+  }
+
+  return getNextQualificationQuestion(session.qualification);
 }
 
 function extractOutputText(data: unknown): string | null {

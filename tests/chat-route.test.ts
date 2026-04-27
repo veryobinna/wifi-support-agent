@@ -128,6 +128,64 @@ describe("/api/chat", () => {
     );
   });
 
+  it("calls the response llm for unknown intents to add warmth and context", async () => {
+    const originalApiKey = process.env.OPENAI_API_KEY;
+    const originalNodeEnv = process.env.NODE_ENV;
+    const consoleLogSpy = vi
+      .spyOn(console, "log")
+      .mockImplementation(() => {});
+    const llmResponse = "I didn't quite catch that. Is the issue general internet/WiFi access, or only a specific app or website?";
+    const createMock = vi
+      .fn()
+      .mockResolvedValueOnce({ output_text: JSON.stringify({ type: "unknown" }) })
+      .mockResolvedValueOnce({ output_text: llmResponse });
+    const session = {
+      ...createInitialConversationSession(),
+      state: "QUALIFYING" as const,
+      currentQuestionId: "connectivityScope" as const
+    };
+
+    Object.assign(process.env, {
+      OPENAI_API_KEY: "test-key",
+      NODE_ENV: "development"
+    });
+    getOpenAIClientMock.mockReturnValue({
+      responses: {
+        create: createMock
+      }
+    } as never);
+
+    try {
+      const response = await POST(
+        createJsonRequest({
+          messages: [{ id: "user-1", role: "user", content: "wifi problem" }],
+          session
+        })
+      );
+
+      const body = (await response.json()) as ChatResponse;
+
+      expect(response.status).toBe(200);
+      expect(body.state).toBe("QUALIFYING");
+      expect(body.message.content).toBe(llmResponse);
+      expect(createMock).toHaveBeenCalledTimes(2);
+    } finally {
+      consoleLogSpy.mockRestore();
+
+      if (originalApiKey === undefined) {
+        Reflect.deleteProperty(process.env, "OPENAI_API_KEY");
+      } else {
+        Object.assign(process.env, { OPENAI_API_KEY: originalApiKey });
+      }
+
+      if (originalNodeEnv === undefined) {
+        Reflect.deleteProperty(process.env, "NODE_ENV");
+      } else {
+        Object.assign(process.env, { NODE_ENV: originalNodeEnv });
+      }
+    }
+  });
+
   it("skips the response LLM when the engine transitions into a terminal state", async () => {
     const originalApiKey = process.env.OPENAI_API_KEY;
     const originalNodeEnv = process.env.NODE_ENV;
