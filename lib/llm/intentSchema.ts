@@ -3,13 +3,16 @@ import {
   type AnswerValue,
   type UserIntent
 } from "@/lib/conversation/intent";
+import type { ResponseFormatTextJSONSchemaConfig } from "openai/resources/responses/responses";
 import type { ClassifierConfig } from "./classifierPlaybook";
 
 export type ParseIntentResult =
   | { ok: true; intent: UserIntent }
   | { ok: false; reason: "parse_failed" | "schema_invalid" };
 
-export function buildSchema(config: ClassifierConfig) {
+export function buildSchema(
+  config: ClassifierConfig
+): ResponseFormatTextJSONSchemaConfig {
   const valueOptions =
     config.validValues.length > 0
       ? [{ enum: [...config.validValues] }, { type: "null" }]
@@ -59,7 +62,7 @@ function normalizeIntent(
   const text = typeof value.text === "string" ? value.text : undefined;
 
   if (value.type === "question") {
-    return { type: "question", text: text ?? "" };
+    return { type: "question", text: text || "" };
   }
 
   if (value.type === "answer") {

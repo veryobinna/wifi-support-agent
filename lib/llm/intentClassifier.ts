@@ -12,8 +12,11 @@ import type {
 import { getClassifierConfig } from "./classifierPlaybook";
 import { fallbackClassifyUserIntent } from "./fallbackIntentClassifier";
 import { buildSchema, parseIntent } from "./intentSchema";
+import { logLlmFailure } from "@/lib/observability/logger";
+import { getOpenAIClient } from "./openaiClient";
 
 export type ClassifyUserIntentInput = {
+  turnId?: string;
   userInput: string;
   session: ConversationSession;
 };
@@ -37,21 +40,23 @@ export type ClassifyUserIntentResult = {
   reason: ClassifierReason;
 };
 
-const openaiResponsesUrl = "https://api.openai.com/v1/responses";
 const defaultModel = "gpt-4o-mini";
 
 export async function classifyUserIntent({
+  turnId,
   userInput,
   session
 }: ClassifyUserIntentInput): Promise<ClassifyUserIntentResult> {
   const fallbackIntent = fallbackClassifyUserIntent({ userInput, session });
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  const model = process.env.OPENAI_MODEL?.trim() || defaultModel;
 
   if (process.env.NODE_ENV === "test") {
     return buildFallbackResult(fallbackIntent, "test_mode");
   }
 
-  if (!apiKey) {
+  const client = getOpenAIClient();
+
+  if (!client) {
     return buildFallbackResult(fallbackIntent, "no_api_key");
   }
 
@@ -61,38 +66,39 @@ export async function classifyUserIntent({
     null;
 
   const config = getClassifierConfig(session.state, questionId);
-
+  const llmRequest = {
+    model,
+    instructions: config.instructions,
+    input: buildClassifierInput(userInput, session),
+    text: {
+      format: buildSchema(config)
+    },
+    max_output_tokens: 120
+  };
   try {
-    const response = await fetch(openaiResponsesUrl, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: process.env.OPENAI_MODEL?.trim() || defaultModel,
-        instructions: config.instructions,
-        input: buildClassifierInput(userInput, session),
-        text: {
-          format: buildSchema(config)
-        },
-        max_output_tokens: 120
-      })
-    });
+    const response = await client.responses.create(llmRequest);
 
-    if (!response.ok) {
-      return buildFallbackResult(fallbackIntent, "http_error");
-    }
-
-    const outputText = extractOutputText((await response.json()) as unknown);
+    const outputText = extractOutputText(response as unknown);
 
     if (!outputText) {
+      logLlmFailure({
+        event: "llm.classifier_failure",
+        turnId,
+        reason: "empty_output",
+        model
+      });
       return buildFallbackResult(fallbackIntent, "empty_output");
     }
 
     const parsedIntent = parseIntent(outputText, config);
 
     if (!parsedIntent.ok) {
+      logLlmFailure({
+        event: "llm.classifier_failure",
+        turnId,
+        reason: parsedIntent.reason,
+        model
+      });
       return buildFallbackResult(fallbackIntent, parsedIntent.reason);
     }
 
@@ -101,7 +107,26 @@ export async function classifyUserIntent({
       source: "llm",
       reason: "llm_success"
     };
-  } catch {
+  } catch (error) {
+    if (isHttpError(error)) {
+      logLlmFailure({
+        event: "llm.classifier_failure",
+        turnId,
+        reason: "http_error",
+        model,
+        httpStatus: error.status,
+        httpStatusText: error.name
+      });
+      return buildFallbackResult(fallbackIntent, "http_error");
+    }
+
+    logLlmFailure({
+      event: "llm.classifier_failure",
+      turnId,
+      reason: "request_failed",
+      model,
+      error
+    });
     return buildFallbackResult(fallbackIntent, "request_failed");
   }
 }
@@ -179,4 +204,18 @@ function extractOutputText(data: unknown): string | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function isHttpError(
+  error: unknown
+): error is {
+  status: number;
+  name?: string;
+} {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    typeof (error as { status?: unknown }).status === "number"
+  );
 }

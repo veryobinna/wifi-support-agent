@@ -1,12 +1,23 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/chat/route";
 import {
   createInitialConversationSession,
   type ChatRequest,
   type ChatResponse
 } from "@/lib/conversation/state";
+import { getOpenAIClient } from "@/lib/llm/openaiClient";
+
+vi.mock("@/lib/llm/openaiClient", () => ({
+  getOpenAIClient: vi.fn()
+}));
 
 describe("/api/chat", () => {
+  const getOpenAIClientMock = vi.mocked(getOpenAIClient);
+
+  beforeEach(() => {
+    getOpenAIClientMock.mockReset();
+  });
+
   it("advances the conversation with a valid user message", async () => {
     const response = await POST(
       createJsonRequest({
@@ -76,18 +87,116 @@ describe("/api/chat", () => {
     expect(body.session?.currentQuestionId).toBe("connectivityScope");
   });
 
+  it("includes reviewer debug metadata when review mode is enabled", async () => {
+    const response = await POST(
+      createJsonRequest(
+        {
+          messages: [
+            {
+              id: "user-1",
+              role: "user",
+              content: "My WiFi is down."
+            }
+          ]
+        },
+        "?review=1"
+      )
+    );
+
+    const body = (await response.json()) as ChatResponse;
+
+    expect(response.status).toBe(200);
+    expect(body.debug).toEqual(
+      expect.objectContaining({
+        latencyMs: expect.objectContaining({
+          total: expect.any(Number),
+          classifier: expect.any(Number),
+          engine: expect.any(Number),
+          response: expect.any(Number)
+        }),
+        previousState: "START",
+        nextState: "QUALIFYING",
+        previousQuestionId: null,
+        nextQuestionId: "deviceImpact",
+        classifierSource: expect.any(String),
+        classifierReason: expect.any(String),
+        responseSource: expect.any(String),
+        responseReason: expect.any(String),
+        draftResponse: expect.any(String),
+        assistantMessage: expect.any(String)
+      })
+    );
+  });
+
+  it("calls the response llm for unknown intents to add warmth and context", async () => {
+    const originalApiKey = process.env.OPENAI_API_KEY;
+    const originalNodeEnv = process.env.NODE_ENV;
+    const consoleLogSpy = vi
+      .spyOn(console, "log")
+      .mockImplementation(() => {});
+    const llmResponse = "I didn't quite catch that. Is the issue general internet/WiFi access, or only a specific app or website?";
+    const createMock = vi
+      .fn()
+      .mockResolvedValueOnce({ output_text: JSON.stringify({ type: "unknown" }) })
+      .mockResolvedValueOnce({ output_text: llmResponse });
+    const session = {
+      ...createInitialConversationSession(),
+      state: "QUALIFYING" as const,
+      currentQuestionId: "connectivityScope" as const
+    };
+
+    Object.assign(process.env, {
+      OPENAI_API_KEY: "test-key",
+      NODE_ENV: "development"
+    });
+    getOpenAIClientMock.mockReturnValue({
+      responses: {
+        create: createMock
+      }
+    } as never);
+
+    try {
+      const response = await POST(
+        createJsonRequest({
+          messages: [{ id: "user-1", role: "user", content: "wifi problem" }],
+          session
+        })
+      );
+
+      const body = (await response.json()) as ChatResponse;
+
+      expect(response.status).toBe(200);
+      expect(body.state).toBe("QUALIFYING");
+      expect(body.message.content).toBe(llmResponse);
+      expect(createMock).toHaveBeenCalledTimes(2);
+    } finally {
+      consoleLogSpy.mockRestore();
+
+      if (originalApiKey === undefined) {
+        Reflect.deleteProperty(process.env, "OPENAI_API_KEY");
+      } else {
+        Object.assign(process.env, { OPENAI_API_KEY: originalApiKey });
+      }
+
+      if (originalNodeEnv === undefined) {
+        Reflect.deleteProperty(process.env, "NODE_ENV");
+      } else {
+        Object.assign(process.env, { NODE_ENV: originalNodeEnv });
+      }
+    }
+  });
+
   it("skips the response LLM when the engine transitions into a terminal state", async () => {
     const originalApiKey = process.env.OPENAI_API_KEY;
     const originalNodeEnv = process.env.NODE_ENV;
-    const originalFetch = globalThis.fetch;
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        output_text: JSON.stringify({
-          type: "answer",
-          value: "specific_service",
-          text: "only one app"
-        })
+    const consoleLogSpy = vi
+      .spyOn(console, "log")
+      .mockImplementation(() => {});
+    const createMock = vi.fn().mockResolvedValue({
+      output_text: JSON.stringify({
+        type: "answer",
+        value: "specific_service",
+        text: "only one app"
       })
     });
     const session = {
@@ -100,7 +209,11 @@ describe("/api/chat", () => {
       OPENAI_API_KEY: "test-key",
       NODE_ENV: "development"
     });
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    getOpenAIClientMock.mockReturnValue({
+      responses: {
+        create: createMock
+      }
+    } as never);
 
     try {
       const response = await POST(
@@ -118,8 +231,10 @@ describe("/api/chat", () => {
       expect(body.message.content).not.toContain(
         "Would you like to start the reboot process?"
       );
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(createMock).toHaveBeenCalledTimes(1);
     } finally {
+      consoleLogSpy.mockRestore();
+
       if (originalApiKey === undefined) {
         Reflect.deleteProperty(process.env, "OPENAI_API_KEY");
       } else {
@@ -131,8 +246,6 @@ describe("/api/chat", () => {
       } else {
         Object.assign(process.env, { NODE_ENV: originalNodeEnv });
       }
-
-      globalThis.fetch = originalFetch;
     }
   });
 
@@ -244,12 +357,12 @@ describe("/api/chat", () => {
   });
 });
 
-function createJsonRequest(body: ChatRequest): Request {
-  return createRawJsonRequest(body);
+function createJsonRequest(body: ChatRequest, query = ""): Request {
+  return createRawJsonRequest(body, query);
 }
 
-function createRawJsonRequest(body: unknown): Request {
-  return new Request("http://localhost/api/chat", {
+function createRawJsonRequest(body: unknown, query = ""): Request {
+  return new Request(`http://localhost/api/chat${query}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"

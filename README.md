@@ -2,7 +2,7 @@
 
 A small LLM-assisted chat app that helps a user troubleshoot WiFi connectivity issues and, when appropriate, walks them through rebooting a Linksys EA6350 router.
 
-Built as a take-home challenge. The goal was to produce a reliable support bot — one that asks qualifying questions, exits gracefully when a reboot is not appropriate, guides the user through the exact steps from the router manual, and handles the post-reboot resolution check.
+The goal is to produce a reliable support bot — one that asks qualifying questions, exits gracefully when a reboot is not appropriate, guides the user through the exact steps from the router manual, and handles the post-reboot resolution check.
 
 ## Tech Stack
 
@@ -100,6 +100,8 @@ User text is not logged by default. Set `LOG_USER_TEXT=true` in `.env.local` for
 
 Assistant text is also omitted by default. Set `LOG_ASSISTANT_TEXT=true` if you need to compare the deterministic draft with the final assistant response during local debugging.
 
+Append `?review=1` to the app URL to enable a reviewer debug panel. It shows the current session state, qualification answers, and the latest turn metadata without changing the conversation flow.
+
 ## Environment Variables
 
 | Variable | Required | Description |
@@ -132,3 +134,5 @@ npm run build
 ```
 
 All tests run without network access and do not require an API key.
+
+The test suite includes a deterministic golden transcript harness for end-to-end workflow regression coverage. Those fixtures check named support transcripts against expected state progression and terminal outcomes without calling the LLM.
