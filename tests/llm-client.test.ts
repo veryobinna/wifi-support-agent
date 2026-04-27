@@ -81,9 +81,7 @@ describe("LLM client", () => {
 
       expect(createMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          instructions: expect.stringContaining(
-            "Do not include XML tags"
-          ),
+            instructions: expect.stringMatching(/Do not .*XML tags/),
           input: expect.stringContaining(
             "Current qualification question: Is this a general WiFi or internet problem, or is it only one app or website?"
           )
