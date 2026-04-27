@@ -116,27 +116,20 @@ export async function POST(request: Request) {
     const engineStartedAt = performance.now();
     const turn = advanceConversation(session, classifiedIntent.intent);
     const engineLatencyMs = getLatencyMs(engineStartedAt);
-    const intentNeedsLlm =
-      classifiedIntent.intent.type === "question" ||
-      classifiedIntent.intent.type === "unknown";
-
     const responseStartedAt = performance.now();
-    const assistantResponse =
-      !intentNeedsLlm || isTerminalState(turn.session.state)
-        ? {
-            assistantMessage: turn.assistantMessage,
-            source: "fallback" as const,
-            reason: isTerminalState(turn.session.state)
-              ? ("terminal_skip" as const)
-              : ("draft_sufficient" as const)
-          }
-        : await generateAssistantResponse({
-            turnId,
-            userInput: latestUserMessage.content,
-            intent: classifiedIntent.intent,
-            draftResponse: turn.assistantMessage,
-            session: turn.session
-          });
+    const assistantResponse = isTerminalState(turn.session.state)
+      ? {
+          assistantMessage: turn.assistantMessage,
+          source: "fallback" as const,
+          reason: "terminal_skip" as const
+        }
+      : await generateAssistantResponse({
+          turnId,
+          userInput: latestUserMessage.content,
+          intent: classifiedIntent.intent,
+          draftResponse: turn.assistantMessage,
+          session: turn.session
+        });
     const responseLatencyMs = getLatencyMs(responseStartedAt);
     const totalLatencyMs = getLatencyMs(requestStartedAt);
 
