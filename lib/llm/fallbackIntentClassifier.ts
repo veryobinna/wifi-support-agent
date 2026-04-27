@@ -174,6 +174,11 @@ function getConnectivityScopeValue(
       "not only one app",
       "every app",
       "all websites",
+      "general internet",
+      "general connectivity",
+      "everything is slow",
+      "nothing works",
+      "nothing loads",
       "everything",
       "nothing loads",
       "internet is down",
@@ -188,10 +193,12 @@ function getConnectivityScopeValue(
   if (
     hasAny(normalizedInput, [
       "only one app",
+      "specific website",
+      "specific app",
       "only one website",
       "just netflix",
       "just youtube",
-      "just email"
+      "just email",
     ])
   ) {
     return connectivityScope.specificService;
