@@ -1,5 +1,4 @@
 import {
-  linksysSmartWifiRebootSteps,
   rebootSteps
 } from "@/lib/conversation/rebootSteps";
 import type { UserIntent } from "@/lib/conversation/intent";
@@ -147,8 +146,6 @@ export async function generateAssistantResponse({
   }
 }
 
-// ─── Helpers ─────────────────────────────────────────────────
-
 function buildFallbackResult(
   assistantMessage: string,
   reason: Exclude<ResponseReason, "llm_success">
@@ -216,10 +213,6 @@ function buildManualContext(): string {
     ...rebootSteps.map(
       (step, index) =>
         `${index + 1}. ${step.instruction} ${step.confirmationPrompt}`
-    ),
-    "Linksys Smart Wi-Fi reboot option:",
-    ...linksysSmartWifiRebootSteps.map(
-      (step, index) => `${index + 1}. ${step.instruction}`
     ),
     "A reboot temporarily disconnects internet access.",
     "A router reboot is unlikely to help during a known internet service provider outage.",

@@ -17,8 +17,6 @@ export type ClassifierConfig = {
   validValues: AnswerValue[];
 };
 
-// ─── Phase configs ────────────────────────────────────────────
-
 const startConfig: ClassifierConfig = {
   instructions: [
     "You are a classifier for a WiFi support assistant at the START of a conversation.",
@@ -129,7 +127,6 @@ const terminalConfig: ClassifierConfig = {
   validValues: []
 };
 
-// ─── Yes/no question IDs ──────────────────────────────────────
 
 const yesNoQuestionIds: QualificationQuestionId[] = [
   "equipmentStatus",
@@ -138,7 +135,6 @@ const yesNoQuestionIds: QualificationQuestionId[] = [
   "acceptsTemporaryInterruption"
 ];
 
-// ─── Lookup ───────────────────────────────────────────────────
 
 export function getClassifierConfig(
   state: ConversationState,

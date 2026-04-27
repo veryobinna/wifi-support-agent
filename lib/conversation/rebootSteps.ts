@@ -57,39 +57,6 @@ export const rebootSteps: RebootStep[] = [
   }
 ];
 
-export const linksysSmartWifiRebootSteps: RebootStep[] = [
-  {
-    id: "log-in-to-linksys-smart-wifi",
-    method: rebootMethod.linksysSmartWifi,
-    instruction: "Log in to Linksys Smart Wi-Fi.",
-    confirmationPrompt: "Continue after signing in."
-  },
-  {
-    id: "open-troubleshooting",
-    method: rebootMethod.linksysSmartWifi,
-    instruction: "Under Router Settings, click Troubleshooting.",
-    confirmationPrompt: "Continue after opening Troubleshooting."
-  },
-  {
-    id: "open-diagnostics",
-    method: rebootMethod.linksysSmartWifi,
-    instruction: "Click the Diagnostics tab.",
-    confirmationPrompt: "Continue after opening Diagnostics."
-  },
-  {
-    id: "click-reboot",
-    method: rebootMethod.linksysSmartWifi,
-    instruction: "Under Reboot, click Reboot.",
-    confirmationPrompt: "Continue after clicking Reboot."
-  },
-  {
-    id: "confirm-reboot",
-    method: rebootMethod.linksysSmartWifi,
-    instruction: "Click Yes to confirm the reboot.",
-    confirmationPrompt: "Continue after confirming the reboot."
-  }
-];
-
 export function formatRebootStep(stepIndex: number): string {
   const step = rebootSteps[stepIndex];
 
